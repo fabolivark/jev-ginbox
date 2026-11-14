@@ -6,7 +6,7 @@ Jev Inbox is a Chrome extension that reorders the message list Gmail already ren
 
 ## How it works
 
-The content script reads only what the list shows for each unread row: sender display name, sender address, subject, the snippet Gmail renders, and the date. Bodies and attachments are never read and never sent.
+The content script reads only what the list shows for each unread row: sender display name, sender address, subject, the snippet Gmail renders, and the date. The snippet is the first part of the email body, so that much body text is sent; the rest of the body and attachments are never read and never sent. Search results are off by default; turn on "Search" in the popup to classify the unread rows of your searches too.
 
 Rows are sent in batches of 20 to the service worker, which asks TypeSafe Jev for one evaluation per row:
 
@@ -14,7 +14,9 @@ Rows are sent in batches of 20 to the service worker, which asks TypeSafe Jev fo
 - `urgency`: a score from not urgent to immediately urgent.
 - One boolean question per label, with your description as the criteria.
 
-Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. A row counts as critical when its critical probability reaches the sensitivity you set. Results are cached in `chrome.storage.local` and reused across renders and tabs, and the cache is bounded to 5000 entries. Clearing the cache, editing a label, or switching providers sends the unread rows of the current list through classification again.
+Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. A row counts as critical when its critical probability reaches the sensitivity you set.
+
+The Critical badge and the order are a model guess from text the sender wrote. A sender controls their name, subject and snippet, so a phishing email written to sound urgent, or written to instruct the model, can earn the badge and the top slot. Nothing checks that a sender is genuine: treat the badge as a sorting hint, never as a sign that an email is safe. Results are cached in `chrome.storage.local` and reused across renders and tabs, and the cache is bounded to 5000 entries. Clearing the cache, editing a label, or switching providers sends the unread rows of the current list through classification again.
 
 ## Install from source
 
@@ -48,7 +50,7 @@ A label needs both a name and a description before it is saved, and the list is 
 
 ## Privacy
 
-Only row metadata leaves your browser: sender name, sender address, subject, the snippet Gmail shows, and the date, sent to the provider you chose under your own key, together with your label names and descriptions as the criteria for the label questions. No email bodies, no attachments, no analytics, no servers of our own. See [PRIVACY.md](PRIVACY.md) for the full description, including what is stored locally and how to delete it.
+Only these fields of each unread row leave your browser: sender name, sender address, subject, the snippet Gmail shows (the first part of the body), and the date, sent under your own key to the provider you chose, together with your label names and descriptions as the criteria for the label questions. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev, so both process it; on TypeSafe, only TypeSafe does. No full bodies, no attachments, no analytics, no servers of our own. See [PRIVACY.md](PRIVACY.md) for the full description, including what is stored locally and how to delete it.
 
 ## Limitations
 

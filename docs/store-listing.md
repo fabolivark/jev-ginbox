@@ -17,7 +17,7 @@ Jev Inbox reorders the message list Gmail already shows. Unread mail moves above
 - Your sensitivity: choose how confident a classification has to be before a row counts as critical.
 - Your provider: Vercel AI Gateway or TypeSafe, with your own key.
 
-Only the unread rows in the Gmail list currently loaded are classified, only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. Results are cached in your browser. Email bodies and attachments are never read or sent. There is no account, no analytics, and no server of ours.
+Only the unread rows in the Gmail list currently loaded are classified, only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. The snippet is the first part of the email body; the rest of the body and attachments are never read or sent. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev. The Critical badge is a model guess from text the sender wrote and can be gamed by a phishing email, so treat it as a sorting hint, not a safety signal. Results are cached in your browser. There is no account, no analytics, and no server of ours.
 
 ## Single purpose statement
 
@@ -34,8 +34,8 @@ No other hosts are requested. The extension makes no request to any server of it
 
 ## Data use disclosure answers
 
-- What data is collected: message metadata from the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows, plus the user's own label names and descriptions, which are sent as the criteria for the label questions. Not the body, not attachments, not the user's contacts, not their browsing history.
-- How the data is used: sent to the AI provider the user selected, to classify each row as critical or not, how urgent it is, and which of the user's labels it belongs to, where each label name and description is the criteria for that label's answer. Results are shown in the Gmail list.
+- What data is collected: message metadata from the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows, plus the user's own label names and descriptions, which are sent as the criteria for the label questions. Not the body beyond the snippet Gmail shows, which is its first part, not attachments, not the user's contacts, not their browsing history.
+- How the data is used: sent to the AI provider the user selected (Vercel AI Gateway forwards it to TypeSafe, which runs Jev), to classify each row as critical or not, how urgent it is, and which of the user's labels it belongs to, where each label name and description is the criteria for that label's answer. Results are shown in the Gmail list.
 - Is data sold to third parties: no.
 - Is data used or transferred for purposes unrelated to the item's single purpose: no.
 - Is data used or transferred to determine creditworthiness or for lending purposes: no.

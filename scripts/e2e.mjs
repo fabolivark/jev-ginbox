@@ -10,6 +10,7 @@ const outDir = join(root, 'e2e-results');
 const GMAIL_URL = 'https://mail.google.com/mail/u/0/#inbox';
 const WIDTHS = [1440, 768, 390, 320];
 const THEMES = ['light', 'dark'];
+const PROVIDER_HOLD_MS = 400;
 
 const LABELS = [
   { id: 'visa', name: 'Visa', description: 'Residence permits, IND letters, immigration appointments' },
@@ -365,6 +366,41 @@ async function assertTheme(page, theme) {
   return report;
 }
 
+async function waitUntil(check, message, timeout = 10000) {
+  const deadline = Date.now() + timeout;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`timed out: ${message}`);
+    await new Promise((done) => setTimeout(done, 100));
+  }
+}
+
+async function checkReadDispatch(page, worker, read, version, providerCalls) {
+  const target = read[read.length - 1];
+  const { email, subject } = await page.evaluate((threadId) => {
+    const row = document.querySelector(`tr.zA:has([data-thread-id="${threadId}"])`);
+    return {
+      email: row.querySelector('span[email]').getAttribute('email'),
+      subject: row.querySelector('[data-thread-id]').textContent.replace(/\s+/g, ' ').trim(),
+    };
+  }, target.threadId);
+  const sent = () => providerCalls.filter((call) => call.body.includes(email));
+  const before = providerCalls.length;
+
+  await setClassifyRead(worker, false);
+  await worker.evaluate((key) => chrome.storage.local.remove(key), `crit:${target.threadId}|${target.lastMessageId}|${version}`);
+  await page.waitForTimeout(2500);
+  assert.equal(providerCalls.length, before, 'an unclassified read row is never sent with the toggle off');
+
+  await setClassifyRead(worker, true);
+  await waitUntil(() => sent().length === 1, 'the read row reaches the provider with the toggle on');
+  assert.ok(sent()[0].body.includes(subject), 'the request carries the read row subject');
+  await setClassifyRead(worker, false);
+  await page.waitForTimeout(PROVIDER_HOLD_MS + 3000);
+  assert.equal(sent().length, 1, 'switching the toggle off mid-flight sends that read row no more');
+  assert.equal(providerCalls.length, before + 1, 'nothing else reaches the provider');
+  return { email, requests: sent().length };
+}
+
 async function shootFilteredGmail(page) {
   const themes = {};
   for (const theme of THEMES) {
@@ -400,9 +436,14 @@ const context = await chromium.launchPersistentContext('', {
 });
 
 const providerCalls = [];
-await context.route(/^https:\/\/(ai-gateway\.vercel\.sh|api\.typesafe\.ai)\//, (route) => {
-  providerCalls.push(route.request().url());
-  return route.abort();
+await context.route(/^https:\/\/(ai-gateway\.vercel\.sh|api\.typesafe\.ai)\//, async (route) => {
+  providerCalls.push({ url: route.request().url(), body: route.request().postData() ?? '' });
+  await new Promise((done) => setTimeout(done, PROVIDER_HOLD_MS));
+  return route.fulfill({
+    status: 400,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: { message: 'e2e: provider calls are refused' } }),
+  });
 });
 const html = fixtureHtml();
 await context.route('https://mail.google.com/**', (route) =>
@@ -495,6 +536,8 @@ try {
   const readFiltered = await checkReadRows(page, worker, rows, read);
   const theme = await shootFilteredGmail(page);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
+  const readDispatch = await checkReadDispatch(page, worker, read, version, providerCalls);
+  await page.close();
 
   const popup = await context.newPage();
   async function shootPopup(state) {
@@ -519,6 +562,7 @@ try {
   assert.match(notice, /forwards/i, 'notice says the Gateway forwards to TypeSafe');
   assert.match(notice, /read emails/i, 'notice says read emails are sent when the toggle is on');
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
+  await setClassifyRead(worker, true);
   await shootPopup('ready');
   assert.equal(await popup.locator('#classifyRead').isChecked(), true, 'popup shows the stored read toggle');
   const readHint = await popup.locator('label[for="classifyRead"]').innerText();
@@ -540,7 +584,7 @@ try {
 
   console.log(
     JSON.stringify(
-      { badges, chips, filtered, readFiltered, theme, storageRead, testFromTab, oversized, providerCalls, searchChecked, outDir },
+      { badges, chips, filtered, readFiltered, readDispatch, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
       null,
       2
     )

@@ -232,6 +232,7 @@ function dispatchableEntries(): Entry[] {
   const out: Entry[] = [];
   for (const entry of candidates.values()) {
     if (classifications.has(entry.key)) continue;
+    if (classifiableKey(entry.row) !== entry.key) continue;
     const failure = failures.get(entry.key);
     if (failure !== undefined && failure.nextAttemptAt > now) continue;
     out.push(entry);
@@ -1097,6 +1098,7 @@ async function bootstrap(): Promise<void> {
     }
     if (changes.classifyRead) {
       classifyRead = changes.classifyRead.newValue === true;
+      candidates.clear();
       activeFilter = null;
       structural = true;
       immediateOrder = true;

@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   privacyAck: false,
   viewInbox: true,
   viewTabs: true,
-  viewSearch: true,
+  viewSearch: false,
   viewOther: false,
 };
 

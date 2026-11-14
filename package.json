@@ -11,7 +11,8 @@
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "store-images": "npm run build && node scripts/store-images.mjs",
-    "test": "node scripts/test.mjs"
+    "test": "node scripts/test.mjs",
+    "e2e": "npm run build && node scripts/e2e.mjs"
   },
   "dependencies": {
     "@ai-sdk/typesafe-ai": "^3.0.4",
@@ -21,6 +22,7 @@
     "typescript": "^7.0.2"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2"
+    "@types/node": "^24.19.2",
+    "playwright": "^1.57.0"
   }
 }

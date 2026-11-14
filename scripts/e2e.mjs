@@ -145,16 +145,28 @@ try {
   assert.deepEqual(providerCalls, [], 'no provider call with a warm cache');
 
   const popup = await context.newPage();
-  for (const theme of THEMES) {
-    await popup.emulateMedia({ colorScheme: theme });
-    for (const width of WIDTHS) {
-      await popup.setViewportSize({ width, height: 900 });
-      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-      await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
-      await popup.waitForFunction(() => document.getAnimations().length === 0);
-      await popup.screenshot({ path: join(outDir, `popup-${theme}-${width}.png`), fullPage: true });
+  async function shootPopup(state) {
+    for (const theme of THEMES) {
+      await popup.emulateMedia({ colorScheme: theme });
+      for (const width of WIDTHS) {
+        await popup.setViewportSize({ width, height: 900 });
+        await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+        await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+        await popup.waitForFunction(() => document.getAnimations().length === 0);
+        await popup.screenshot({ path: join(outDir, `popup-${state}-${theme}-${width}.png`), fullPage: true });
+      }
     }
   }
+
+  await worker.evaluate(() => chrome.storage.local.set({ privacyAck: false }));
+  await shootPopup('notice');
+  const notice = await popup.locator('#privacyNotice').innerText();
+  assert.equal(await popup.locator('#privacyNotice').isVisible(), true, 'first-run notice shows');
+  assert.doesNotMatch(notice, /bodies are never sent/i, 'notice does not deny sending body text');
+  assert.match(notice, /first part of the (email )?body/i, 'notice says the snippet is body text');
+  assert.match(notice, /forwards/i, 'notice says the Gateway forwards to TypeSafe');
+  await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
+  await shootPopup('ready');
   const searchChecked = await popup.locator('#viewSearch').isChecked();
   assert.equal(searchChecked, false, 'Search is off by default in the popup');
   assert.equal(await popup.locator('#viewInbox').isChecked(), true, 'popup still reads storage');

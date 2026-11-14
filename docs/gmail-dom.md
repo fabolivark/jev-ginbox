@@ -34,7 +34,7 @@ The provider is a setting too: `provider` is `gateway` or `typesafe` (default `g
 - Snippet: `span.y2`, with nested `span.Zt` removed before reading text. `Zt` holds Gmail's leading separator.
 - Date: the `title` of `td.xW span[title]`, falling back to the text of `td.xW`.
 - A row missing the sender, the subject element, or any of the three ids is skipped.
-- The script never touches row clicks or `location.hash`, and never moves a row in the DOM: Gmail's own row actions, selection, and navigation keep working, because every row stays at the position Gmail gave it.
+- The script never changes `location.hash` and never moves a row in the DOM: Gmail's own row actions, selection, and navigation keep working, because every row stays at the position Gmail gave it. The only row events it touches are those on its own filter buttons inside `span.gc-chips`, which it stops before Gmail sees them (see Filter).
 
 ## Unread bar and row order
 
@@ -49,6 +49,15 @@ The provider is a setting too: `provider` is `gateway` or `typesafe` (default `g
 - Chip hue comes from a fixed set of eight hues indexed by the label's position in the settings list. The bar, the badge, and the chips mix their hue and `currentColor`, so they read on Gmail's light, dark, and custom themes.
 - The labels themselves live in `chrome.storage.local` as `labels: { id, name, description }[]`, edited in the popup, capped at 15. Changes apply live. A label with an empty name or description is not saved; the popup shows an inline message and keeps the previous set.
 - `render()` writes nothing when the order already matches, the bar text is unchanged, and every row carries the chips signature for its current state. After its own writes it drops both observers' pending records with `observer.takeRecords()` and `classObserver.takeRecords()`, and the childList observer ignores records inside the bar or carrying only `gc-` elements, so a pass cannot retrigger itself. The childList observer watches `childList` only, the class observer watches `class` on the rows of the visible list only, and the `ResizeObserver` watches box sizes only, so the `transform` and `transition` writes a pass makes reach none of them.
+
+## Filter
+
+- Controls: the Critical badge (`button.gc-badge`) and each label chip (`button.gc-chip`) in a row, and the matching `button.gc-filter` in the bar's `span.gc-filters` group, carry `data-gc-filter`, `critical` or `label:<id>`, and `aria-pressed`. The bar lists Critical and every label with at least one matching loaded row, with its count, plus the active one at zero; while a filter is on it adds `button.gc-clear` (`data-gc-clear`) and a `span.gc-filter-note` that reads `Showing N of M loaded rows with X. Filters this page only, not the whole mailbox.`, where M counts every `tr.zA` in the visible list.
+- Matching: a row matches when it is a classifiable unread row whose classification shows that chip, through the same `isCritical` and `shownLabels` from `src/filter.ts` that decide which chips it carries. Read rows, unclassified rows and rows without a thread id never match.
+- Hiding: the order pass ranks matching rows first, in the usual order, then the rest, and marks every non-matching row with the `data-gc-hidden` attribute, which `section.css` turns into `visibility: hidden`, `pointer-events: none` and no border or shadow on the row and its descendants. An attribute, not a class, because the class observer watches `class`. Rows keep their boxes, so the slot measurement, the inset and the `ResizeObserver` work unchanged, and the list keeps its height with a blank tail. Restore removes the attribute with the transforms.
+- Events: a window capture listener for pointer, mouse, click and Enter or Space key events on a control inside the bar or a `span.gc-chips` calls `stopImmediatePropagation`, so neither the row nor Gmail's document listeners see it, and acts on `click`. Default actions are left alone, so a key still activates the button and focus moves normally. A Gmail listener registered on `window` in the capture phase before the content script loaded would still see the event; the fixture has none, and real Gmail is not checked.
+- Focus: chips in rows keep their node and get `aria-pressed` updated in place. The bar is rebuilt when its signature (counts, active filter, shown and loaded rows) changes, and focus goes back to the button with the same token, or to the first filter button when Clear disappears.
+- Lifetime: the filter lives in content-script state with the `filterRoute` it was set on, the route without the open thread or the query. The order pass clears it when the route differs, so another list, label, tab or search clears it, while opening Compose or a thread and coming back keeps it. A new list node from a Gmail re-render keeps it. A change to `labels`, `provider`, `enabled` or a view toggle clears it.
 
 ## Classify flow
 

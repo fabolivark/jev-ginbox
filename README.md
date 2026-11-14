@@ -48,6 +48,12 @@ Labels are your own categories. Each label has a name, which becomes a chip, and
 
 A label needs both a name and a description before it is saved, and the list is capped at 15. The chip color follows the label's position in the list.
 
+## Filtering
+
+Every chip is a button. Click a label chip or the Critical badge on a row, or the matching button in the bar above the list, and the list shows only the rows that carry it; the bar names the active filter, how many rows match, and a Clear button. Click the active chip again, or Clear, to get the full list back. The buttons work from the keyboard with Tab, Enter and Space, and announce whether they are pressed.
+
+The filter covers only the rows Gmail has loaded in the list you are looking at, usually one page of 50, not the whole mailbox. To find every message with a label across the mailbox, use Gmail's own search. Only unread, classified rows can match, because only they carry chips, so a message you open and return from drops out of the filtered view once Gmail marks it read. The filter hides rows on screen only: hidden rows keep their place in Gmail's list, so the list keeps its height with a blank space below the matches, and Gmail's own select-all and keyboard shortcuts still act on the hidden rows. It stays on while Gmail re-renders the list or opens Compose, and clears when you move to another list, edit the labels, switch providers, or turn the extension or that view off. Clicking a chip never opens, marks, or labels the message.
+
 ## Privacy
 
 Only these fields of each unread row leave your browser: sender name, sender address, subject, the snippet Gmail shows (the first part of the body), and the date, sent under your own key to the provider you chose, together with your label names and descriptions as the criteria for the label questions. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev, so both process it; on TypeSafe, only TypeSafe does. No full bodies, no attachments, no analytics, no servers of our own. See [PRIVACY.md](PRIVACY.md) for the full description, including what is stored locally and how to delete it.
@@ -67,7 +73,7 @@ Only these fields of each unread row leave your browser: sender name, sender add
 npm run watch      # rebuild on change
 npm run typecheck  # tsc --noEmit
 npm test           # unit tests
-npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, screenshot the popup
+npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, screenshot the filtered list and the popup
 ```
 
 `npm run build` writes `dist/`, which holds the unpacked extension.

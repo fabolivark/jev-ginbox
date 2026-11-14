@@ -5,3 +5,4 @@ dist/
 fixtures/
 .DS_Store
 dev/store/raw/
+.test-dist/

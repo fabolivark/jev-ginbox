@@ -1,13 +1,14 @@
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const entryPoints = readdirSync('tests')
   .filter((name) => name.endsWith('.test.ts'))
   .map((name) => join('tests', name));
-const outdir = mkdtempSync(join(tmpdir(), 'jev-inbox-tests-'));
+const outdir = '.test-dist';
+rmSync(outdir, { recursive: true, force: true });
+mkdirSync(outdir);
 
 try {
   await build({

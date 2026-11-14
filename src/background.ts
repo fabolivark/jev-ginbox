@@ -1,43 +1,69 @@
 import { classifyEmail, testConnection } from './jev';
+import { parseRequest } from './requests';
 import {
+  CACHE_PREFIX,
   cacheVersion,
+  contentChanges,
+  contentState,
   isClassification,
-  isEmailState,
-  isLabelConfig,
   isProvider,
   threadKey,
   type ClassifyError,
-  type ClassifyMessage,
   type ClassifyResult,
   type Classification,
   type EmailState,
   type LabelConfig,
   type Provider,
-  type TestMessage,
+  type StateResult,
   type TestResult,
 } from './shared';
 
-const CACHE_PREFIX = 'crit:';
 const CONCURRENCY = 8;
 const CACHE_MAX = 5000;
 const CACHE_KEEP = 4000;
 
 const inflight = new Map<string, Promise<Classification>>();
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  void handle(message).then(sendResponse, (err: unknown) => {
+const GMAIL_TABS = 'https://mail.google.com/*';
+
+void chrome.storage.local
+  .setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
+  .catch((error: unknown) => {
+    console.error('storage access level failed', error);
+  });
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+  const message = contentChanges(changes);
+  if (message === undefined) return;
+  void chrome.tabs.query({ url: GMAIL_TABS }).then((tabs) => {
+    for (const tab of tabs) {
+      if (tab.id === undefined) continue;
+      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    }
+  });
+});
+
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  void handle(message, sender).then(sendResponse, (err: unknown) => {
     console.error('classify failed', err);
     sendResponse({ ok: false, error: 'failed' } satisfies ClassifyResult);
   });
   return true;
 });
 
-async function handle(message: unknown): Promise<ClassifyResult | TestResult> {
-  const test = testRequest(message);
-  const request = classifyRequest(message);
-  if (!test && request === undefined) {
-    return { ok: false, error: 'failed' } satisfies ClassifyResult;
+async function handle(
+  message: unknown,
+  sender: chrome.runtime.MessageSender
+): Promise<ClassifyResult | StateResult | TestResult> {
+  const parsed = parseRequest(message, sender, chrome.runtime.id);
+  if (parsed === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  if (parsed.type === 'state') {
+    const stored = await chrome.storage.local.get(null);
+    return { ok: true, ...contentState(stored) } satisfies StateResult;
   }
+  const test = parsed.type === 'test';
+  const request = parsed.type === 'classify' ? parsed : undefined;
 
   const {
     provider: storedProvider,
@@ -189,22 +215,4 @@ function toClassifyError(error: unknown): ClassifyError {
     if (typeof code === 'number') failure.status = code;
   }
   return failure;
-}
-
-function classifyRequest(value: unknown): ClassifyMessage | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('type' in value) || value.type !== 'classify') return undefined;
-  if (!('emails' in value) || !Array.isArray(value.emails)) return undefined;
-  if (!('labels' in value) || !Array.isArray(value.labels)) return undefined;
-  const emails = value.emails.filter(isEmailState);
-  const labels = value.labels.filter(isLabelConfig);
-  if (emails.length !== value.emails.length) return undefined;
-  if (labels.length !== value.labels.length) return undefined;
-  return { type: 'classify', emails, labels };
-}
-
-function testRequest(value: unknown): TestMessage | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('type' in value) || value.type !== 'test') return undefined;
-  return { type: 'test' };
 }

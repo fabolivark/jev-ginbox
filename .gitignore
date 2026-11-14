@@ -5,3 +5,5 @@ dist/
 fixtures/
 .DS_Store
 dev/store/raw/
+.test-dist/
+e2e-results/

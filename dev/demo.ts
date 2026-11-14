@@ -1,5 +1,6 @@
 import {
   cacheVersion,
+  contentState,
   threadKey,
   type Classification,
   type EmailState,
@@ -73,8 +74,6 @@ const canned: Record<string, Classification> = {
   demothread000009: PASSPORT,
 };
 
-const listeners: unknown[] = [];
-
 function isClassifyMessage(
   value: unknown
 ): value is { type: 'classify'; emails: EmailState[]; labels: LabelConfig[] } {
@@ -85,7 +84,12 @@ function isClassifyMessage(
   return true;
 }
 
+function isStateMessage(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'type' in value && value.type === 'state';
+}
+
 async function respond(message: unknown): Promise<unknown> {
+  if (isStateMessage(message)) return { ok: true, ...contentState(store) };
   if (!isClassifyMessage(message)) return { ok: true };
   if (!acked) return { ok: false, error: 'needs_ack' };
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -102,28 +106,10 @@ async function respond(message: unknown): Promise<unknown> {
 
 Object.assign(window, {
   chrome: {
-    storage: {
-      local: {
-        get: async (keys?: string[] | null) => {
-          if (keys === null || keys === undefined) return { ...store };
-          const out: DemoStore = {};
-          for (const key of keys) if (key in store) out[key] = store[key];
-          return out;
-        },
-        set: async (items: DemoStore) => {
-          Object.assign(store, items);
-        },
-        remove: async () => {},
-        getKeys: async () => Object.keys(store),
-      },
-      onChanged: {
-        addListener: (listener: unknown) => {
-          listeners.push(listener);
-        },
-      },
-    },
     runtime: {
+      id: 'demo',
       sendMessage: respond,
+      onMessage: { addListener: () => {} },
       getManifest: () => ({ version: '0.1.0' }),
     },
   },

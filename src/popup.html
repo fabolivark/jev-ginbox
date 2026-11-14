@@ -522,11 +522,12 @@
 
     <div id="privacyNotice" class="card notice" hidden>
       <p>
-        Jev Inbox sends the sender, subject, a short snippet and date of unread emails in the list
-        currently loaded to Jev (through Vercel AI Gateway or TypeSafe, depending on your key) to
-        classify them. Your label names and descriptions are sent with each classification as
-        criteria, so do not put sensitive information in them. Email bodies are never sent. Results
-        are cached in this browser.
+        Jev Inbox sends the sender, subject, snippet and date of unread emails in the list currently
+        loaded to Jev to classify them. The snippet is the first part of the email body; the rest of
+        the body is never sent. With a Vercel AI Gateway key, Vercel forwards each request to
+        TypeSafe; with a TypeSafe key, it goes to TypeSafe only. Your label names and descriptions
+        are sent with each classification as criteria, so do not put sensitive information in them.
+        Results are cached in this browser.
       </p>
       <div class="notice-actions">
         <button id="gotIt" class="primary" type="button">Got it</button>

@@ -69,6 +69,7 @@ const testBtn = document.getElementById('testBtn') as HTMLButtonElement;
 const testHint = document.getElementById('testHint') as HTMLSpanElement;
 const testResult = document.getElementById('testResult') as HTMLSpanElement;
 const enabled = document.getElementById('enabled') as HTMLInputElement;
+const classifyRead = document.getElementById('classifyRead') as HTMLInputElement;
 const statusLine = document.getElementById('statusLine') as HTMLParagraphElement;
 const saved = document.getElementById('saved') as HTMLSpanElement;
 const privacyNotice = document.getElementById('privacyNotice') as HTMLDivElement;
@@ -338,6 +339,8 @@ async function load(): Promise<void> {
   );
   updateKeyRows();
   enabled.checked = stored.enabled !== false;
+  classifyRead.checked =
+    typeof stored.classifyRead === 'boolean' ? stored.classifyRead : DEFAULT_SETTINGS.classifyRead;
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
   threshold.value = String(value);
   thresholdValue.textContent = percent(value);
@@ -386,6 +389,10 @@ for (const field of [keyFields.gateway, keyFields.typesafe]) {
 enabled.addEventListener('change', () => {
   updateStatus();
   void chrome.storage.local.set({ enabled: enabled.checked }).then(() => showSaved());
+});
+
+classifyRead.addEventListener('change', () => {
+  void chrome.storage.local.set({ classifyRead: classifyRead.checked }).then(() => showSaved());
 });
 
 threshold.addEventListener('input', () => {

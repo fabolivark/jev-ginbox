@@ -527,7 +527,8 @@
         the body is never sent. With a Vercel AI Gateway key, Vercel forwards each request to
         TypeSafe; with a TypeSafe key, it goes to TypeSafe only. Your label names and descriptions
         are sent with each classification as criteria, so do not put sensitive information in them.
-        Results are cached in this browser.
+        If you turn on "Also classify read mail", the same fields of read emails in the loaded list
+        are sent too. Results are cached in this browser.
       </p>
       <div class="notice-actions">
         <button id="gotIt" class="primary" type="button">Got it</button>
@@ -760,6 +761,24 @@
         <label class="switch-text" for="viewOther">
           <span class="switch-title">Labels and other folders</span>
           <span class="switch-hint">Labels, Starred, All mail and other views</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Read mail</h2>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="classifyRead" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Also classify read mail</span>
+        </label>
+        <label class="switch-text" for="classifyRead">
+          <span class="switch-title">Also classify read mail</span>
+          <span class="switch-hint"
+            >Read rows in the loaded list get chips and Critical, so the filter finds them too. Their
+            sender, subject, snippet and date are sent to the provider like unread ones.</span
+          >
         </label>
       </div>
     </section>

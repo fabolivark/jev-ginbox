@@ -69,6 +69,7 @@ const CHIP_HUES = 8;
 const ANIMATION_TRANSITION = 'transform 180ms';
 const HIDDEN_ATTRIBUTE = 'data-gc-hidden';
 const CONTROL_SELECTOR = '[data-gc-filter], [data-gc-clear]';
+const SENDER_SELECTOR = 'span[email][name]';
 const ISOLATED_EVENTS = [
   'pointerdown',
   'pointerup',
@@ -92,6 +93,7 @@ let halted = false;
 let errorMessage: string | null = null;
 let enabled = DEFAULT_SETTINGS.enabled;
 let threshold = DEFAULT_SETTINGS.threshold;
+let classifyRead = DEFAULT_SETTINGS.classifyRead;
 let provider: Provider = DEFAULT_SETTINGS.provider;
 let labels: LabelConfig[] = [];
 let keyVersion = cacheVersion([], DEFAULT_SETTINGS.provider);
@@ -188,9 +190,14 @@ function currentView(): View | null {
   return viewFromHash(location.hash);
 }
 
+function senderOf(row: HTMLTableRowElement): Element | null {
+  return row.querySelector('span.zF[email][name]') ?? row.querySelector(SENDER_SELECTOR);
+}
+
 function extractState(row: HTMLTableRowElement): EmailState | undefined {
-  const sender = row.querySelector('span.zF[email][name]');
-  const subjectEl = row.querySelector('span.bqe[data-thread-id]');
+  const sender = senderOf(row);
+  const subjectEl =
+    row.querySelector('span.bqe[data-thread-id]') ?? row.querySelector('[data-thread-id]');
   if (!sender || !subjectEl) return undefined;
   const threadId = subjectEl.getAttribute('data-thread-id');
   const legacyThreadId = subjectEl.getAttribute('data-legacy-thread-id');
@@ -299,9 +306,13 @@ function cacheKeyOf(row: HTMLTableRowElement): string | null {
   return `${threadId}|${lastMessageId}|${keyVersion}`;
 }
 
-function classifiableUnreadKey(row: HTMLTableRowElement): string | null {
-  if (!row.classList.contains('zE')) return null;
-  if (row.querySelector('span.zF[email][name]') === null) return null;
+function isUnread(row: HTMLTableRowElement): boolean {
+  return row.classList.contains('zE');
+}
+
+function classifiableKey(row: HTMLTableRowElement): string | null {
+  if (!classifyRead && !isUnread(row)) return null;
+  if (senderOf(row) === null) return null;
   return cacheKeyOf(row);
 }
 
@@ -376,7 +387,7 @@ function applyRowOrder(): void {
       index,
       height: rect.height,
       top: rect.top - listTop - rowTranslateY(row),
-      unread: row.classList.contains('zE'),
+      unread: isUnread(row),
       classification,
       match: filter === null || rowMatches(row, filter),
     });
@@ -536,7 +547,8 @@ async function sync(): Promise<void> {
   const list = currentList;
   const seen = new Set<string>();
   const next = new Map<string, Entry>();
-  for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
+  for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
+    if (classifiableKey(el) === null) continue;
     const state = extractState(el);
     if (!state) continue;
     const key = threadKey(state, keyVersion);
@@ -687,25 +699,23 @@ function compareClassifications(a: Classification, b: Classification): number {
 function renderBar(): void {
   if (bar === null) return;
   let total = 0;
+  let classifiable = 0;
   let remaining = 0;
-  if (currentList !== null) {
-    for (const row of currentList.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
-      const key = classifiableUnreadKey(row);
-      if (key === null) continue;
-      total += 1;
-      if (!classifications.has(key)) remaining += 1;
-    }
-  }
-  const status = inFlight ? remaining : 0;
-  const rowClassifications: (Classification | undefined)[] = [];
   let loaded = 0;
+  const rowClassifications: (Classification | undefined)[] = [];
   if (currentList !== null) {
     for (const row of currentList.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
       loaded += 1;
-      const key = classifiableUnreadKey(row);
-      if (key !== null) rowClassifications.push(classifications.get(key));
+      const key = classifiableKey(row);
+      if (key === null) continue;
+      if (isUnread(row)) total += 1;
+      classifiable += 1;
+      const classification = classifications.get(key);
+      if (classification === undefined) remaining += 1;
+      rowClassifications.push(classification);
     }
   }
+  const status = inFlight ? remaining : 0;
   const filter = activeFilter;
   const options = filterOptions(labels, rowClassifications, threshold, filter);
   const shown =
@@ -713,7 +723,7 @@ function renderBar(): void {
       ? 0
       : rowClassifications.filter((row) => matchesFilter(filter, row, labels, threshold)).length;
   const optionSignature = options.map((option) => `${option.token}:${option.count}`).join(',');
-  const signature = `${total}|${status}|${errorMessage ?? ''}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
+  const signature = `${total}|${classifiable}|${status}|${errorMessage ?? ''}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
   if (bar.dataset.gcSig === signature) return;
   bar.dataset.gcSig = signature;
   const focused = document.activeElement;
@@ -729,7 +739,9 @@ function renderBar(): void {
   if (status > 0) {
     const statusEl = document.createElement('span');
     statusEl.className = 'gc-status';
-    statusEl.textContent = `Classifying ${remaining} of ${total} unread`;
+    statusEl.textContent = classifyRead
+      ? `Classifying ${remaining} of ${classifiable} loaded rows`
+      : `Classifying ${remaining} of ${total} unread`;
     bar.appendChild(statusEl);
     const progress = document.createElement('span');
     progress.className = 'gc-progress';
@@ -790,8 +802,7 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
   const existing = row.querySelector<HTMLElement>('span.gc-chips');
   if (existing) return existing;
   const container = row.querySelector('.y6');
-  const subject =
-    row.querySelector('span.bog') ?? row.querySelector('span.bqe[data-thread-id]');
+  const subject = row.querySelector('span.bog') ?? row.querySelector('[data-thread-id]');
   const slot = document.createElement('span');
   slot.className = 'gc-chips';
   if (container !== null) container.insertBefore(slot, container.firstChild);
@@ -820,10 +831,12 @@ function chipHasContent(classification: Classification | undefined): boolean {
 function renderChips(): void {
   const list = currentList;
   if (list === null) return;
-  for (const stale of list.querySelectorAll('tr.zA:not(.zE) span.gc-chips')) stale.remove();
-  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
-    const key = classifiableUnreadKey(row);
-    if (key === null) continue;
+  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
+    const key = classifiableKey(row);
+    if (key === null) {
+      row.querySelector('span.gc-chips')?.remove();
+      continue;
+    }
     const classification = classifications.get(key);
     const failureCount = failures.get(key)?.failureCount ?? 0;
     if (!chipHasContent(classification)) {
@@ -878,7 +891,7 @@ function activeToken(): string | null {
 }
 
 function rowMatches(row: HTMLTableRowElement, filter: RowFilter): boolean {
-  const key = classifiableUnreadKey(row);
+  const key = classifiableKey(row);
   if (key === null) return false;
   return matchesFilter(filter, classifications.get(key), labels, threshold);
 }
@@ -955,6 +968,7 @@ async function bootstrap(): Promise<void> {
   const stored = state.settings;
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
+  if (typeof stored.classifyRead === 'boolean') classifyRead = stored.classifyRead;
   if (isProvider(stored.provider)) provider = stored.provider;
   if (Array.isArray(stored.labels)) labels = stored.labels.filter(isLabelConfig);
   keyVersion = cacheVersion(labels, provider);
@@ -1033,6 +1047,12 @@ async function bootstrap(): Promise<void> {
     }
     if (changes.enabled) {
       enabled = changes.enabled.newValue !== false;
+      activeFilter = null;
+      structural = true;
+      immediateOrder = true;
+    }
+    if (changes.classifyRead) {
+      classifyRead = changes.classifyRead.newValue === true;
       activeFilter = null;
       structural = true;
       immediateOrder = true;

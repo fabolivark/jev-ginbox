@@ -117,7 +117,7 @@ Object.assign(window, {
 
 const gmailOrder = [
   ...document.querySelectorAll<HTMLTableRowElement>('.Cp tbody tr.zA'),
-].map((row) => (row.querySelector('span.bqe')?.textContent ?? '').replace(/\s+/g, ' ').trim());
+].map((row) => (row.querySelector('[data-thread-id]')?.textContent ?? '').replace(/\s+/g, ' ').trim());
 const opened = document.getElementById('demo-opened');
 
 document.addEventListener('click', (event) => {

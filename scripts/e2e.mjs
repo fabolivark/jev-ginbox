@@ -23,12 +23,22 @@ function fixtureHtml() {
     .replace(/<script src="..\/dist\/[a-z]+\.js"><\/script>/g, '');
 }
 
-function unreadRows(html) {
+function rowsOf(html, rowClass) {
   const rows = [];
-  const pattern =
-    /<tr class="zA zE">[\s\S]*?data-thread-id="([^"]+)"[\s\S]*?data-legacy-last-message-id="([^"]+)"/g;
+  const pattern = new RegExp(
+    `<tr class="${rowClass}">[\\s\\S]*?data-thread-id="([^"]+)"[\\s\\S]*?data-legacy-last-message-id="([^"]+)"`,
+    'g'
+  );
   for (const match of html.matchAll(pattern)) rows.push({ threadId: match[1], lastMessageId: match[2] });
   return rows;
+}
+
+function unreadRows(html) {
+  return rowsOf(html, 'zA zE');
+}
+
+function readRows(html) {
+  return rowsOf(html, 'zA yO');
 }
 
 async function isolatedWorld(cdp, extensionId) {
@@ -197,6 +207,78 @@ async function checkFilter(page, worker, rows, originalTbody, version) {
   return { all, loaded, money, critical };
 }
 
+function rowSelector(threadId) {
+  return `tr.zA:has([data-thread-id="${threadId}"])`;
+}
+
+async function setClassifyRead(worker, value) {
+  await worker.evaluate((next) => chrome.storage.local.set({ classifyRead: next }), value);
+}
+
+async function readRowsAfterUnread(page) {
+  return page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.Cp tr.zA')];
+    const unread = rows.filter((row) => row.classList.contains('zE'));
+    const read = rows.filter((row) => !row.classList.contains('zE'));
+    const lastUnread = Math.max(...unread.map((row) => row.getBoundingClientRect().bottom));
+    const firstRead = Math.min(...read.map((row) => row.getBoundingClientRect().top));
+    return lastUnread <= firstRead + 0.5;
+  });
+}
+
+async function checkReadRows(page, worker, rows, read) {
+  const readMoney = read[0].threadId;
+  const readChips = page.locator('tr.zA:not(.zE) span.gc-chips');
+  assert.equal(await readChips.count(), 0, 'read rows carry no chips while the toggle is off');
+
+  await setClassifyRead(worker, true);
+  const readBadge = page.locator(`${rowSelector(readMoney)} [data-gc-filter="critical"]`);
+  await readBadge.waitFor({ state: 'attached', timeout: 10000 });
+  await settle(page);
+  assert.equal(
+    await page.locator(`${rowSelector(readMoney)} [data-gc-filter="label:money"]`).count(),
+    1,
+    'a read row gets its label chip with the toggle on'
+  );
+  assert.equal(await readRowsAfterUnread(page), true, 'read rows, even critical ones, stay below unread rows');
+
+  await page.locator('#gc-unread [data-gc-filter="label:money"]').click();
+  await settle(page);
+  const money = [rows[1].threadId, rows[2].threadId, readMoney].sort();
+  assert.deepEqual((await visibleThreads(page)).threads, money, 'the Money filter includes the read Money row');
+
+  await page.evaluate((threadId) => {
+    const row = document.querySelector(`tr.zA:has([data-thread-id="${threadId}"])`);
+    row.classList.remove('zE');
+    row.classList.add('yO');
+  }, rows[1].threadId);
+  await settle(page);
+  assert.deepEqual((await visibleThreads(page)).threads, money, 'a row Gmail marks read stays in the filter');
+
+  await setClassifyRead(worker, false);
+  await readChips.first().waitFor({ state: 'detached', timeout: 10000 });
+  await settle(page);
+  assert.equal(await readChips.count(), 0, 'turning the toggle off removes the read chips');
+  assert.deepEqual(await activeFilter(page), [], 'turning the toggle off clears the filter');
+  await page.evaluate((threadId) => {
+    const row = document.querySelector(`tr.zA:has([data-thread-id="${threadId}"])`);
+    row.classList.remove('yO');
+    row.classList.add('zE');
+  }, rows[1].threadId);
+  await page.locator('#gc-unread [data-gc-filter="label:money"]').click();
+  await settle(page);
+  assert.deepEqual(
+    (await visibleThreads(page)).threads,
+    [rows[1].threadId, rows[2].threadId].sort(),
+    'with the toggle off a cached read classification never matches'
+  );
+  await page.locator('#gc-unread [data-gc-clear]').click();
+  await setClassifyRead(worker, true);
+  await readBadge.waitFor({ state: 'attached', timeout: 10000 });
+  await settle(page);
+  return { money };
+}
+
 async function shootFilteredGmail(page) {
   for (const theme of THEMES) {
     const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
@@ -262,6 +344,17 @@ try {
       ts: Date.now(),
     };
   });
+  const read = readRows(html);
+  assert.ok(read.length >= 2, 'fixture has read rows');
+  read.forEach((row, index) => {
+    const key = threadKey({ ...row, legacyThreadId: '', fromName: '', fromEmail: '', subject: '', snippet: '', date: '' }, version);
+    seed[`crit:${key}`] = {
+      criticalProbability: index === 0 ? 0.95 : 0.1,
+      urgencyScore: index === 0 ? 3 : 0,
+      labels: { visa: 0.05, money: index === 0 ? 0.8 : 0.05, home: 0.05 },
+      ts: Date.now(),
+    };
+  });
   await worker.evaluate((items) => chrome.storage.local.set(items), seed);
 
   const page = await context.newPage();
@@ -303,6 +396,7 @@ try {
   assert.deepEqual(providerCalls, [], 'no provider call with a warm cache');
 
   const filtered = await checkFilter(page, worker, rows, tbodyHtml(html), version);
+  const readFiltered = await checkReadRows(page, worker, rows, read);
   await shootFilteredGmail(page);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
 
@@ -327,15 +421,30 @@ try {
   assert.doesNotMatch(notice, /bodies are never sent/i, 'notice does not deny sending body text');
   assert.match(notice, /first part of the (email )?body/i, 'notice says the snippet is body text');
   assert.match(notice, /forwards/i, 'notice says the Gateway forwards to TypeSafe');
+  assert.match(notice, /read emails/i, 'notice says read emails are sent when the toggle is on');
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
   await shootPopup('ready');
+  assert.equal(await popup.locator('#classifyRead').isChecked(), true, 'popup shows the stored read toggle');
+  const readHint = await popup.locator('label[for="classifyRead"]').innerText();
+  assert.match(readHint, /Also classify read mail/, 'popup names the read toggle');
+  assert.match(readHint, /sent/i, 'the read toggle says read rows are sent too');
+  await worker.evaluate(() => chrome.storage.local.remove('classifyRead'));
+  await popup.reload();
+  await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+  assert.equal(await popup.locator('#classifyRead').isChecked(), false, 'reading read mail is off by default');
+  await popup.locator('label[for="classifyRead"]').click();
+  assert.equal(
+    await worker.evaluate(() => chrome.storage.local.get('classifyRead').then((stored) => stored.classifyRead)),
+    true,
+    'the popup switch stores the read toggle'
+  );
   const searchChecked = await popup.locator('#viewSearch').isChecked();
   assert.equal(searchChecked, false, 'Search is off by default in the popup');
   assert.equal(await popup.locator('#viewInbox').isChecked(), true, 'popup still reads storage');
 
   console.log(
     JSON.stringify(
-      { badges, chips, filtered, storageRead, testFromTab, oversized, providerCalls, searchChecked, outDir },
+      { badges, chips, filtered, readFiltered, storageRead, testFromTab, oversized, providerCalls, searchChecked, outDir },
       null,
       2
     )

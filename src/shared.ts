@@ -62,6 +62,8 @@ export type LabelConfig = { id: string; name: string; description: string };
 
 export const MAX_LABELS = 15;
 
+export const MAX_CLASSIFY_BATCH = 20;
+
 export type EmailState = {
   threadId: string;
   legacyThreadId: string;

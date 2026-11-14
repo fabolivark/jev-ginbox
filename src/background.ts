@@ -1,19 +1,16 @@
 import { classifyEmail, testConnection } from './jev';
+import { parseRequest } from './requests';
 import {
   cacheVersion,
   isClassification,
-  isEmailState,
-  isLabelConfig,
   isProvider,
   threadKey,
   type ClassifyError,
-  type ClassifyMessage,
   type ClassifyResult,
   type Classification,
   type EmailState,
   type LabelConfig,
   type Provider,
-  type TestMessage,
   type TestResult,
 } from './shared';
 
@@ -24,20 +21,22 @@ const CACHE_KEEP = 4000;
 
 const inflight = new Map<string, Promise<Classification>>();
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  void handle(message).then(sendResponse, (err: unknown) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  void handle(message, sender).then(sendResponse, (err: unknown) => {
     console.error('classify failed', err);
     sendResponse({ ok: false, error: 'failed' } satisfies ClassifyResult);
   });
   return true;
 });
 
-async function handle(message: unknown): Promise<ClassifyResult | TestResult> {
-  const test = testRequest(message);
-  const request = classifyRequest(message);
-  if (!test && request === undefined) {
-    return { ok: false, error: 'failed' } satisfies ClassifyResult;
-  }
+async function handle(
+  message: unknown,
+  sender: chrome.runtime.MessageSender
+): Promise<ClassifyResult | TestResult> {
+  const parsed = parseRequest(message, sender, chrome.runtime.id);
+  if (parsed === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  const test = parsed.type === 'test';
+  const request = parsed.type === 'classify' ? parsed : undefined;
 
   const {
     provider: storedProvider,
@@ -189,22 +188,4 @@ function toClassifyError(error: unknown): ClassifyError {
     if (typeof code === 'number') failure.status = code;
   }
   return failure;
-}
-
-function classifyRequest(value: unknown): ClassifyMessage | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('type' in value) || value.type !== 'classify') return undefined;
-  if (!('emails' in value) || !Array.isArray(value.emails)) return undefined;
-  if (!('labels' in value) || !Array.isArray(value.labels)) return undefined;
-  const emails = value.emails.filter(isEmailState);
-  const labels = value.labels.filter(isLabelConfig);
-  if (emails.length !== value.emails.length) return undefined;
-  if (labels.length !== value.labels.length) return undefined;
-  return { type: 'classify', emails, labels };
-}
-
-function testRequest(value: unknown): TestMessage | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  if (!('type' in value) || value.type !== 'test') return undefined;
-  return { type: 'test' };
 }

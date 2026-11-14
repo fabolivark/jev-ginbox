@@ -1,6 +1,7 @@
 import {
   CONTENT_SETTING_KEYS,
   DEFAULT_SETTINGS,
+  MAX_CLASSIFY_BATCH,
   VIEWS,
   VIEW_SETTING_KEYS,
   cacheVersion,
@@ -46,7 +47,6 @@ type Ranked = {
 };
 
 const DEBOUNCE_MS = 800;
-const BATCH_SIZE = 20;
 const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
@@ -574,7 +574,7 @@ async function dispatchPending(): Promise<void> {
     if (!canDispatch(startedGeneration, startedList)) break;
     const batch = dispatchableEntries()
       .filter((entry) => !attempted.has(entry.key))
-      .slice(0, BATCH_SIZE);
+      .slice(0, MAX_CLASSIFY_BATCH);
     if (batch.length === 0) break;
     for (const entry of batch) attempted.add(entry.key);
     let response: ClassifyResult;

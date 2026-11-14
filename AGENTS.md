@@ -19,6 +19,7 @@ Commands:
 - `npm run watch`: same build, rebuilds on change.
 - `npm run typecheck`: `tsc --noEmit` on `src/`, then on `src/` and `tests/` with `tsconfig.test.json`.
 - `npm test`: bundles `tests/*.test.ts` into the gitignored `.test-dist/` and runs them with `node --test`.
+- `npm run e2e`: builds, loads `dist/` into Playwright's Chromium, serves the `dev/demo.html` markup at `https://mail.google.com`, seeds settings and cache through the service worker, checks that rows are ordered and chipped with no provider call, that the content script cannot read storage, and that the worker refuses `test` from Gmail and an oversized batch, then screenshots the popup at 1440, 768, 390 and 320 in light and dark into the gitignored `e2e-results/`. CI (`.github/workflows/ci.yml`) runs typecheck, test, build and e2e.
 - `npm run store-images`: runs the build, then `scripts/store-images.mjs`, which renders the popup states, the five Gmail-window screenshots and the two promo tiles into `docs/store/`.
 
 File map:

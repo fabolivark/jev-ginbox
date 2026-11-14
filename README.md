@@ -66,6 +66,8 @@ Only these fields of each unread row leave your browser: sender name, sender add
 ```bash
 npm run watch      # rebuild on change
 npm run typecheck  # tsc --noEmit
+npm test           # unit tests
+npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, screenshot the popup
 ```
 
 `npm run build` writes `dist/`, which holds the unpacked extension.

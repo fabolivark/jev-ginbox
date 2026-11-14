@@ -133,3 +133,85 @@
 .gc-hue-7 {
   --gc-hue: #5f6368;
 }
+
+button.gc-badge,
+button.gc-chip,
+.gc-filter,
+.gc-clear {
+  appearance: none;
+  font: inherit;
+  line-height: inherit;
+  margin: 0;
+  cursor: pointer;
+}
+
+.gc-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.gc-filters-label,
+.gc-filter-note {
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+
+.gc-filter {
+  background: color-mix(in srgb, var(--gc-hue) 22%, transparent);
+  color: color-mix(in srgb, var(--gc-hue) 70%, currentColor);
+  border: 1px solid color-mix(in srgb, var(--gc-hue) 45%, transparent);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.gc-filter-critical {
+  --gc-hue: #d93025;
+}
+
+.gc-filter-count {
+  margin-left: 4px;
+  opacity: 0.75;
+}
+
+button.gc-badge:hover,
+button.gc-chip:hover,
+.gc-filter:hover {
+  background: color-mix(in srgb, var(--gc-hue) 34%, transparent);
+}
+
+button.gc-badge[aria-pressed='true'],
+button.gc-chip[aria-pressed='true'],
+.gc-filter[aria-pressed='true'] {
+  background: var(--gc-hue);
+  border-color: var(--gc-hue);
+  color: #fff;
+}
+
+.gc-clear {
+  background: transparent;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 3px;
+  padding: 0 6px;
+}
+
+.gc-clear:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+button.gc-badge:focus-visible,
+button.gc-chip:focus-visible,
+.gc-filter:focus-visible,
+.gc-clear:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--gc-hue, currentColor) 70%, currentColor);
+  outline-offset: 1px;
+}
+
+tr.zA[data-gc-hidden],
+tr.zA[data-gc-hidden] * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}

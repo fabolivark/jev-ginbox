@@ -21,6 +21,18 @@ import {
   type ContentState,
   type View,
 } from './shared';
+import {
+  filterName,
+  filterNote,
+  filterOptions,
+  filterRoute,
+  filterToken,
+  isCritical,
+  matchesFilter,
+  parseFilterToken,
+  shownLabels,
+  type RowFilter,
+} from './filter';
 
 type Entry = {
   key: string;
@@ -47,6 +59,7 @@ type Ranked = {
   top: number;
   unread: boolean;
   classification: Classification | undefined;
+  match: boolean;
 };
 
 const DEBOUNCE_MS = 800;
@@ -54,6 +67,20 @@ const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
 const ANIMATION_TRANSITION = 'transform 180ms';
+const HIDDEN_ATTRIBUTE = 'data-gc-hidden';
+const CONTROL_SELECTOR = '[data-gc-filter], [data-gc-clear]';
+const ISOLATED_EVENTS = [
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'click',
+  'dblclick',
+  'auxclick',
+  'keydown',
+  'keyup',
+  'keypress',
+];
 
 let bar: HTMLElement | null = null;
 let observer: MutationObserver | null = null;
@@ -77,6 +104,8 @@ let orderRoute = '';
 let animateNextOrder = false;
 let orderPassQueued = false;
 let animationCleanupId: number | undefined;
+let activeFilter: RowFilter | null = null;
+let activeRoute = '';
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -198,10 +227,6 @@ function dispatchableEntries(): Entry[] {
     out.push(entry);
   }
   return out;
-}
-
-function isCriticalClassification(classification: Classification): boolean {
-  return classification.criticalProbability >= threshold;
 }
 
 function recordFailure(key: string): void {
@@ -340,17 +365,20 @@ function applyRowOrder(): void {
   pruneVisuals(rows);
   const listTop = list.getBoundingClientRect().top;
   const items: Ranked[] = [];
+  const filter = activeFilter;
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
     const key = cacheKeyOf(row);
     const rect = row.getBoundingClientRect();
+    const classification = key === null ? undefined : classifications.get(key);
     items.push({
       row,
       index,
       height: rect.height,
       top: rect.top - listTop - rowTranslateY(row),
       unread: row.classList.contains('zE'),
-      classification: key === null ? undefined : classifications.get(key),
+      classification,
+      match: filter === null || rowMatches(row, filter),
     });
   }
   const slots = items.map((item) => item.top);
@@ -366,7 +394,7 @@ function applyRowOrder(): void {
   for (const item of items) {
     if (rowThreadId(item.row) === null) rest.push(item);
     else if (!item.unread) read.push(item);
-    else if (item.classification !== undefined && isCriticalClassification(item.classification)) {
+    else if (item.classification !== undefined && isCritical(item.classification, threshold)) {
       critical.push(item);
     } else unread.push(item);
   }
@@ -382,7 +410,16 @@ function applyRowOrder(): void {
     animateNextOrder && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   animateNextOrder = false;
   const changed: { row: HTMLTableRowElement; value: string }[] = [];
-  const order = [...critical, ...unread, ...read, ...rest];
+  const ranked = [...critical, ...unread, ...read, ...rest];
+  const order =
+    filter === null
+      ? ranked
+      : [...ranked.filter((item) => item.match), ...ranked.filter((item) => !item.match)];
+  for (const item of items) {
+    if (item.match === item.row.hasAttribute(HIDDEN_ATTRIBUTE)) {
+      item.row.toggleAttribute(HIDDEN_ATTRIBUTE, !item.match);
+    }
+  }
   let previousBottom: number | undefined;
   for (let slot = 0; slot < order.length; slot++) {
     const item = order[slot];
@@ -441,6 +478,9 @@ function finishAnimations(): void {
 function restoreList(list: HTMLElement | null): void {
   finishAnimations();
   for (const slot of list?.querySelectorAll('span.gc-chips') ?? []) slot.remove();
+  for (const row of (list ?? document).querySelectorAll(`tr[${HIDDEN_ATTRIBUTE}]`)) {
+    row.removeAttribute(HIDDEN_ATTRIBUTE);
+  }
   for (const [row, visual] of [...visuals]) {
     if (list !== null && !list.contains(row)) continue;
     if (row.style.transform === visual.applied) row.style.transform = visual.transform;
@@ -456,6 +496,7 @@ function restoreList(list: HTMLElement | null): void {
 }
 
 function runOrderPass(): void {
+  if (activeFilter !== null && filterRoute(location.hash) !== activeRoute) activeFilter = null;
   const view = currentView();
   const list = visibleList();
   const route = routeKey(location.hash);
@@ -656,9 +697,30 @@ function renderBar(): void {
     }
   }
   const status = inFlight ? remaining : 0;
-  const signature = `${total}|${status}|${errorMessage ?? ''}`;
+  const rowClassifications: (Classification | undefined)[] = [];
+  let loaded = 0;
+  if (currentList !== null) {
+    for (const row of currentList.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
+      loaded += 1;
+      const key = classifiableUnreadKey(row);
+      if (key !== null) rowClassifications.push(classifications.get(key));
+    }
+  }
+  const filter = activeFilter;
+  const options = filterOptions(labels, rowClassifications, threshold, filter);
+  const shown =
+    filter === null
+      ? 0
+      : rowClassifications.filter((row) => matchesFilter(filter, row, labels, threshold)).length;
+  const optionSignature = options.map((option) => `${option.token}:${option.count}`).join(',');
+  const signature = `${total}|${status}|${errorMessage ?? ''}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
   if (bar.dataset.gcSig === signature) return;
   bar.dataset.gcSig = signature;
+  const focused = document.activeElement;
+  const focusedControl =
+    focused instanceof HTMLElement && bar.contains(focused)
+      ? (focused.dataset.gcFilter ?? (focused.dataset.gcClear !== undefined ? '' : null))
+      : null;
   bar.textContent = '';
   const count = document.createElement('span');
   count.className = 'gc-count';
@@ -679,6 +741,49 @@ function renderBar(): void {
     err.textContent = errorMessage;
     bar.appendChild(err);
   }
+  if (options.length > 0) {
+    const group = document.createElement('span');
+    group.className = 'gc-filters';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Filter the loaded rows by label');
+    const caption = document.createElement('span');
+    caption.className = 'gc-filters-label';
+    caption.textContent = 'Filter loaded rows:';
+    group.appendChild(caption);
+    for (const option of options) {
+      const parsed = parseFilterToken(option.token, labels);
+      if (parsed === null) continue;
+      const hue = option.hue === null ? 'gc-filter-critical' : `gc-hue-${option.hue % CHIP_HUES}`;
+      const button = filterButton(parsed, `gc-filter ${hue}`, option.name);
+      const count = document.createElement('span');
+      count.className = 'gc-filter-count';
+      count.textContent = String(option.count);
+      button.appendChild(count);
+      group.appendChild(button);
+    }
+    if (filter !== null) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'gc-clear';
+      clear.dataset.gcClear = '';
+      clear.textContent = 'Clear';
+      group.appendChild(clear);
+    }
+    bar.appendChild(group);
+  }
+  if (filter !== null) {
+    const note = document.createElement('span');
+    note.className = 'gc-filter-note';
+    note.textContent = filterNote(filterName(filter, labels), shown, loaded);
+    bar.appendChild(note);
+  }
+  if (focusedControl !== null) {
+    const selector =
+      focusedControl === '' ? '[data-gc-clear]' : `[data-gc-filter="${CSS.escape(focusedControl)}"]`;
+    const target =
+      bar.querySelector<HTMLElement>(selector) ?? bar.querySelector<HTMLElement>('[data-gc-filter]');
+    target?.focus();
+  }
 }
 
 function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
@@ -697,7 +802,7 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
 
 function chipSignature(classification: Classification | undefined, failureCount: number): string {
   if (classification === undefined) return `p:${failureCount}`;
-  let signature = `c:${isCriticalClassification(classification)}|${threshold}|${keyVersion}|`;
+  let signature = `c:${isCritical(classification, threshold)}|${threshold}|${keyVersion}|`;
   for (const label of labels) {
     const probability = classification.labels[label.id];
     if (probability === undefined || probability < threshold) continue;
@@ -708,11 +813,8 @@ function chipSignature(classification: Classification | undefined, failureCount:
 
 function chipHasContent(classification: Classification | undefined): boolean {
   if (classification === undefined) return true;
-  if (isCriticalClassification(classification)) return true;
-  return labels.some((label) => {
-    const probability = classification.labels[label.id];
-    return probability !== undefined && probability >= threshold;
-  });
+  if (isCritical(classification, threshold)) return true;
+  return shownLabels(classification, labels, threshold).length > 0;
 }
 
 function renderChips(): void {
@@ -747,28 +849,92 @@ function renderChips(): void {
       }
       continue;
     }
-    if (isCriticalClassification(classification)) {
-      const badge = document.createElement('span');
-      badge.className = 'gc-badge';
-      badge.textContent = 'Critical';
-      slot.appendChild(badge);
+    if (isCritical(classification, threshold)) {
+      slot.appendChild(filterButton({ kind: 'critical' }, 'gc-badge', 'Critical'));
     }
-    for (let index = 0; index < labels.length; index++) {
-      const label = labels[index];
-      const probability = classification.labels[label.id];
-      if (probability === undefined || probability < threshold) continue;
-      const chip = document.createElement('span');
-      chip.className = `gc-chip gc-hue-${index % CHIP_HUES}`;
-      chip.textContent = label.name;
-      slot.appendChild(chip);
+    for (const label of shownLabels(classification, labels, threshold)) {
+      const hue = labels.indexOf(label) % CHIP_HUES;
+      slot.appendChild(
+        filterButton({ kind: 'label', id: label.id }, `gc-chip gc-hue-${hue}`, label.name)
+      );
     }
   }
+}
+
+function filterButton(filter: RowFilter, className: string, text: string): HTMLButtonElement {
+  const token = filterToken(filter);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.dataset.gcFilter = token;
+  button.setAttribute('aria-pressed', String(activeToken() === token));
+  button.title = `Show only the loaded rows with ${filterName(filter, labels)}`;
+  button.textContent = text;
+  return button;
+}
+
+function activeToken(): string | null {
+  return activeFilter === null ? null : filterToken(activeFilter);
+}
+
+function rowMatches(row: HTMLTableRowElement, filter: RowFilter): boolean {
+  const key = classifiableUnreadKey(row);
+  if (key === null) return false;
+  return matchesFilter(filter, classifications.get(key), labels, threshold);
+}
+
+function syncPressed(): void {
+  const token = activeToken();
+  for (const control of currentList?.querySelectorAll<HTMLElement>('[data-gc-filter]') ?? []) {
+    const pressed = String(control.dataset.gcFilter === token);
+    if (control.getAttribute('aria-pressed') !== pressed) control.setAttribute('aria-pressed', pressed);
+  }
+}
+
+function setFilter(next: RowFilter | null): void {
+  activeFilter = next;
+  activeRoute = filterRoute(location.hash);
+  render();
+}
+
+function onControl(control: HTMLElement): void {
+  if (control.dataset.gcClear !== undefined) {
+    setFilter(null);
+    return;
+  }
+  const next = parseFilterToken(control.dataset.gcFilter, labels);
+  if (next === null) return;
+  setFilter(activeToken() === filterToken(next) ? null : next);
+}
+
+function isolateControls(): void {
+  for (const type of ISOLATED_EVENTS) {
+    window.addEventListener(
+      type,
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const control = target.closest<HTMLElement>(CONTROL_SELECTOR);
+        if (control === null || !isOwnControl(control)) return;
+        if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== ' ') return;
+        event.stopImmediatePropagation();
+        if (type === 'click') onControl(control);
+      },
+      true
+    );
+  }
+}
+
+function isOwnControl(control: HTMLElement): boolean {
+  if (bar !== null && bar.contains(control)) return true;
+  return control.closest('span.gc-chips') !== null;
 }
 
 function render(): void {
   if (bar === null) return;
   renderBar();
   renderChips();
+  syncPressed();
   applyRowOrder();
   observer?.takeRecords();
   classObserver?.takeRecords();
@@ -809,6 +975,7 @@ async function bootstrap(): Promise<void> {
     schedule();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  isolateControls();
   resizeObserver = new ResizeObserver(() => {
     applyOrderNow();
   });
@@ -851,6 +1018,7 @@ async function bootstrap(): Promise<void> {
       classifications.clear();
       failures.clear();
       halted = false;
+      activeFilter = null;
       structural = true;
     }
     if (changes.labels) {
@@ -860,10 +1028,12 @@ async function bootstrap(): Promise<void> {
       candidates.clear();
       classifications.clear();
       failures.clear();
+      activeFilter = null;
       structural = true;
     }
     if (changes.enabled) {
       enabled = changes.enabled.newValue !== false;
+      activeFilter = null;
       structural = true;
       immediateOrder = true;
     }
@@ -876,6 +1046,7 @@ async function bootstrap(): Promise<void> {
       if (!change) continue;
       viewEnabled[view] =
         typeof change.newValue === 'boolean' ? change.newValue : DEFAULT_SETTINGS[key];
+      activeFilter = null;
       structural = true;
       immediateOrder = true;
     }

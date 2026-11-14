@@ -58,6 +58,12 @@ export const CONTENT_SETTING_KEYS = POPUP_SETTING_KEYS.filter(
   (key) => key !== 'apiKeyHint' && key !== 'typesafeApiKeyHint'
 );
 
+export type ContentSettingKey = (typeof CONTENT_SETTING_KEYS)[number];
+
+export const CACHE_PREFIX = 'crit:';
+
+const API_KEY_NAMES: readonly string[] = ['apiKey', 'typesafeApiKey'];
+
 export type LabelConfig = { id: string; name: string; description: string };
 
 export const MAX_LABELS = 15;
@@ -98,6 +104,23 @@ export type ClassifyResult =
   | { ok: false; error: 'missing_key' | 'failed' | 'needs_ack' };
 
 export type TestMessage = { type: 'test' };
+
+export type StateMessage = { type: 'state' };
+
+export type ContentState = {
+  settings: Partial<Record<ContentSettingKey, unknown>>;
+  cache: Record<string, Classification>;
+};
+
+export type StateResult = ({ ok: true } & ContentState) | { ok: false; error: 'failed' };
+
+export type StorageChange = { newValue?: unknown; oldValue?: unknown };
+
+export type ChangedMessage = {
+  type: 'changed';
+  keysChanged: boolean;
+  changes: Record<string, StorageChange>;
+};
 
 export type TestResult =
   | { ok: true }
@@ -153,6 +176,65 @@ export function isClassification(value: unknown): value is Classification {
   const labels = v.labels;
   if (typeof labels !== 'object' || labels === null) return false;
   return Object.values(labels).every((probability) => typeof probability === 'number');
+}
+
+function isContentSettingKey(key: string): key is ContentSettingKey {
+  return (CONTENT_SETTING_KEYS as readonly string[]).includes(key);
+}
+
+export function contentState(stored: Record<string, unknown>): ContentState {
+  const settings: Partial<Record<ContentSettingKey, unknown>> = {};
+  for (const key of CONTENT_SETTING_KEYS) {
+    if (key in stored) settings[key] = stored[key];
+  }
+  const labels = Array.isArray(stored.labels) ? stored.labels.filter(isLabelConfig) : [];
+  const provider = isProvider(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider;
+  const version = cacheVersion(labels, provider);
+  const cache: Record<string, Classification> = {};
+  for (const [storageKey, value] of Object.entries(stored)) {
+    if (!storageKey.startsWith(CACHE_PREFIX)) continue;
+    const cacheKey = storageKey.slice(CACHE_PREFIX.length);
+    if (!cacheKey.endsWith(`|${version}`)) continue;
+    if (isClassification(value)) cache[cacheKey] = value;
+  }
+  return { settings, cache };
+}
+
+export function contentChanges(
+  changes: Record<string, StorageChange>
+): ChangedMessage | undefined {
+  let keysChanged = false;
+  const forwarded: Record<string, StorageChange> = {};
+  for (const [key, change] of Object.entries(changes)) {
+    if (API_KEY_NAMES.includes(key)) {
+      keysChanged = true;
+      continue;
+    }
+    if (!isContentSettingKey(key) && !key.startsWith(CACHE_PREFIX)) continue;
+    forwarded[key] = 'newValue' in change ? { newValue: change.newValue } : {};
+  }
+  if (!keysChanged && Object.keys(forwarded).length === 0) return undefined;
+  return { type: 'changed', keysChanged, changes: forwarded };
+}
+
+export function isContentState(value: unknown): value is ContentState {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.settings === 'object' &&
+    v.settings !== null &&
+    typeof v.cache === 'object' &&
+    v.cache !== null
+  );
+}
+
+export function isChangedMessage(value: unknown): value is ChangedMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v.type !== 'changed' || typeof v.keysChanged !== 'boolean') return false;
+  const changes = v.changes;
+  if (typeof changes !== 'object' || changes === null) return false;
+  return Object.values(changes).every((change) => typeof change === 'object' && change !== null);
 }
 
 const THREAD_ID = /^[A-Za-z0-9]{16,}$/;

@@ -1,7 +1,10 @@
 import { classifyEmail, testConnection } from './jev';
 import { parseRequest } from './requests';
 import {
+  CACHE_PREFIX,
   cacheVersion,
+  contentChanges,
+  contentState,
   isClassification,
   isProvider,
   threadKey,
@@ -11,15 +14,35 @@ import {
   type EmailState,
   type LabelConfig,
   type Provider,
+  type StateResult,
   type TestResult,
 } from './shared';
 
-const CACHE_PREFIX = 'crit:';
 const CONCURRENCY = 8;
 const CACHE_MAX = 5000;
 const CACHE_KEEP = 4000;
 
 const inflight = new Map<string, Promise<Classification>>();
+
+const GMAIL_TABS = 'https://mail.google.com/*';
+
+void chrome.storage.local
+  .setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
+  .catch((error: unknown) => {
+    console.error('storage access level failed', error);
+  });
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+  const message = contentChanges(changes);
+  if (message === undefined) return;
+  void chrome.tabs.query({ url: GMAIL_TABS }).then((tabs) => {
+    for (const tab of tabs) {
+      if (tab.id === undefined) continue;
+      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    }
+  });
+});
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   void handle(message, sender).then(sendResponse, (err: unknown) => {
@@ -32,9 +55,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 async function handle(
   message: unknown,
   sender: chrome.runtime.MessageSender
-): Promise<ClassifyResult | TestResult> {
+): Promise<ClassifyResult | StateResult | TestResult> {
   const parsed = parseRequest(message, sender, chrome.runtime.id);
   if (parsed === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  if (parsed.type === 'state') {
+    const stored = await chrome.storage.local.get(null);
+    return { ok: true, ...contentState(stored) } satisfies StateResult;
+  }
   const test = parsed.type === 'test';
   const request = parsed.type === 'classify' ? parsed : undefined;
 

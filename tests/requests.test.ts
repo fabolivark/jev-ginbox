@@ -83,3 +83,9 @@ test('unknown messages are rejected', () => {
   assert.equal(parseRequest({ type: 'nope' }, popup, RUNTIME_ID), undefined);
   assert.equal(parseRequest(null, popup, RUNTIME_ID), undefined);
 });
+
+test('state is accepted only from the Gmail content script', () => {
+  assert.equal(parseRequest({ type: 'state' }, gmailTab, RUNTIME_ID)?.type, 'state');
+  assert.equal(parseRequest({ type: 'state' }, popup, RUNTIME_ID), undefined);
+  assert.equal(parseRequest({ type: 'state' }, { ...gmailTab, id: 'other' }, RUNTIME_ID), undefined);
+});

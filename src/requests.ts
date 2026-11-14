@@ -4,10 +4,11 @@ import {
   isEmailState,
   isLabelConfig,
   type ClassifyMessage,
+  type StateMessage,
   type TestMessage,
 } from './shared';
 
-export type Request = ClassifyMessage | TestMessage;
+export type Request = ClassifyMessage | StateMessage | TestMessage;
 
 const GMAIL_ORIGIN = 'https://mail.google.com';
 
@@ -57,6 +58,9 @@ export function parseRequest(
   if (typeof value !== 'object' || value === null || !('type' in value)) return undefined;
   if (value.type === 'classify') {
     return fromGmail(sender, runtimeId) ? classifyRequest(value) : undefined;
+  }
+  if (value.type === 'state') {
+    return fromGmail(sender, runtimeId) ? { type: 'state' } : undefined;
   }
   if (value.type === 'test') {
     return fromExtensionPage(sender, runtimeId) ? { type: 'test' } : undefined;

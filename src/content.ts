@@ -1,10 +1,12 @@
 import {
-  CONTENT_SETTING_KEYS,
+  CACHE_PREFIX,
   DEFAULT_SETTINGS,
   MAX_CLASSIFY_BATCH,
   VIEWS,
   VIEW_SETTING_KEYS,
   cacheVersion,
+  isChangedMessage,
+  isContentState,
   isClassification,
   isLabelConfig,
   isProvider,
@@ -16,6 +18,7 @@ import {
   type EmailState,
   type LabelConfig,
   type Provider,
+  type ContentState,
   type View,
 } from './shared';
 
@@ -50,7 +53,6 @@ const DEBOUNCE_MS = 800;
 const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
-const CACHE_PREFIX = 'crit:';
 const ANIMATION_TRANSITION = 'transform 180ms';
 
 let bar: HTMLElement | null = null;
@@ -772,8 +774,19 @@ function render(): void {
   classObserver?.takeRecords();
 }
 
+async function loadState(): Promise<ContentState> {
+  try {
+    const response: unknown = await chrome.runtime.sendMessage({ type: 'state' });
+    if (isContentState(response)) return response;
+  } catch {
+    return { settings: {}, cache: {} };
+  }
+  return { settings: {}, cache: {} };
+}
+
 async function bootstrap(): Promise<void> {
-  const stored = await chrome.storage.local.get([...CONTENT_SETTING_KEYS]);
+  const state = await loadState();
+  const stored = state.settings;
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
   if (isProvider(stored.provider)) provider = stored.provider;
@@ -784,12 +797,7 @@ async function bootstrap(): Promise<void> {
     const storedValue = stored[key];
     if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
   }
-  const allKeys =
-    typeof chrome.storage.local.getKeys === 'function' ? await chrome.storage.local.getKeys() : [];
-  const cacheKeys = allKeys.filter((storageKey) => storageKey.startsWith(CACHE_PREFIX));
-  const cached = cacheKeys.length > 0 ? await chrome.storage.local.get(cacheKeys) : {};
-  for (const [storageKey, value] of Object.entries(cached)) {
-    const cacheKey = storageKey.slice(CACHE_PREFIX.length);
+  for (const [cacheKey, value] of Object.entries(state.cache)) {
     if (!cacheKey.endsWith(`|${keyVersion}`)) continue;
     if (isClassification(value)) classifications.set(cacheKey, value);
   }
@@ -810,7 +818,9 @@ async function bootstrap(): Promise<void> {
     applyOrderNow();
     schedule();
   });
-  chrome.storage.onChanged.addListener((changes) => {
+  chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+    if (sender.id !== chrome.runtime.id || !isChangedMessage(message)) return;
+    const { changes } = message;
     let structural = false;
     let immediateOrder = false;
     for (const [storageKey, change] of Object.entries(changes)) {
@@ -825,7 +835,7 @@ async function bootstrap(): Promise<void> {
         failures.delete(cacheKey);
       }
     }
-    if (changes.apiKey || changes.typesafeApiKey) {
+    if (message.keysChanged) {
       halted = false;
       failures.clear();
     }

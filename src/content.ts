@@ -33,6 +33,7 @@ import {
   shownLabels,
   type RowFilter,
 } from './filter';
+import { parseColor, themeFromBackgrounds, type GmailTheme } from './theme';
 
 type Entry = {
   key: string;
@@ -108,6 +109,8 @@ let orderPassQueued = false;
 let animationCleanupId: number | undefined;
 let activeFilter: RowFilter | null = null;
 let activeRoute = '';
+let theme: GmailTheme = 'light';
+let themeCheckId: number | undefined;
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -805,6 +808,7 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
   const subject = row.querySelector('span.bog') ?? row.querySelector('[data-thread-id]');
   const slot = document.createElement('span');
   slot.className = 'gc-chips';
+  slot.dataset.gcTheme = theme;
   if (container !== null) container.insertBefore(slot, container.firstChild);
   else if (subject?.parentElement != null) subject.parentElement.insertBefore(slot, subject);
   else return null;
@@ -943,8 +947,47 @@ function isOwnControl(control: HTMLElement): boolean {
   return control.closest('span.gc-chips') !== null;
 }
 
+function listBackgrounds(list: HTMLElement): string[] {
+  const out: string[] = [];
+  for (let node: Element | null = list; node !== null; node = node.parentElement) {
+    const value = window.getComputedStyle(node).backgroundColor;
+    out.push(value);
+    const color = parseColor(value);
+    if (color !== null && color.a >= 1) break;
+  }
+  return out;
+}
+
+function applyTheme(): void {
+  const list = currentList;
+  if (list === null || bar === null) return;
+  theme = themeFromBackgrounds(listBackgrounds(list));
+  if (bar.dataset.gcTheme !== theme) bar.dataset.gcTheme = theme;
+  for (const slot of list.querySelectorAll<HTMLElement>('span.gc-chips')) {
+    if (slot.dataset.gcTheme !== theme) slot.dataset.gcTheme = theme;
+  }
+}
+
+function scheduleThemeCheck(): void {
+  if (themeCheckId !== undefined) return;
+  themeCheckId = window.requestAnimationFrame(() => {
+    themeCheckId = undefined;
+    applyTheme();
+  });
+}
+
+function watchTheme(): void {
+  const themeObserver = new MutationObserver(scheduleThemeCheck);
+  themeObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+  for (const root of [document.documentElement, document.body]) {
+    themeObserver.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleThemeCheck);
+}
+
 function render(): void {
   if (bar === null) return;
+  applyTheme();
   renderBar();
   renderChips();
   syncPressed();
@@ -990,6 +1033,7 @@ async function bootstrap(): Promise<void> {
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   isolateControls();
+  watchTheme();
   resizeObserver = new ResizeObserver(() => {
     applyOrderNow();
   });

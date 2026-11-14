@@ -279,19 +279,115 @@ async function checkReadRows(page, worker, rows, read) {
   return { money };
 }
 
+async function themeReport(page) {
+  return page.evaluate(() => {
+    const parse = (value) => {
+      const text = value.trim();
+      const srgb = /^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/.exec(text);
+      if (srgb !== null) {
+        return { r: srgb[1] * 255, g: srgb[2] * 255, b: srgb[3] * 255, a: srgb[4] === undefined ? 1 : Number(srgb[4]) };
+      }
+      const rgb = /^rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)(?:[,/] ?([\d.]+))?\)$/.exec(text);
+      if (rgb === null) throw new Error(`unparsed color ${text}`);
+      return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]), a: rgb[4] === undefined ? 1 : Number(rgb[4]) };
+    };
+    const over = (top, bottom) => ({
+      r: top.r * top.a + bottom.r * (1 - top.a),
+      g: top.g * top.a + bottom.g * (1 - top.a),
+      b: top.b * top.a + bottom.b * (1 - top.a),
+      a: 1,
+    });
+    const lum = (c) => {
+      const f = (v) => {
+        const x = v / 255;
+        return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    };
+    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+    const background = (el) => {
+      const layers = [];
+      let base = { r: 255, g: 255, b: 255, a: 1 };
+      for (let node = el; node !== null; node = node.parentElement) {
+        const color = parse(getComputedStyle(node).backgroundColor);
+        if (color.a === 0) continue;
+        if (color.a >= 1) {
+          base = color;
+          break;
+        }
+        layers.push(color);
+      }
+      for (const layer of layers.reverse()) base = over(layer, base);
+      return base;
+    };
+    const opacity = (el) => {
+      let value = 1;
+      for (let node = el; node !== null; node = node.parentElement) value *= Number(getComputedStyle(node).opacity);
+      return value;
+    };
+    const selector = [
+      '#gc-unread .gc-count',
+      '#gc-unread .gc-filters-label',
+      '#gc-unread .gc-filter',
+      '#gc-unread .gc-filter-count',
+      '#gc-unread .gc-clear',
+      '#gc-unread .gc-filter-note',
+      '.gc-chips .gc-chip',
+      '.gc-chips .gc-badge',
+    ].join(', ');
+    const checked = [];
+    for (const el of document.querySelectorAll(selector)) {
+      if (getComputedStyle(el).visibility === 'hidden') continue;
+      const bg = background(el);
+      const fg = parse(getComputedStyle(el).color);
+      const value = ratio(over({ ...fg, a: fg.a * opacity(el) }, bg), bg);
+      checked.push({ text: el.textContent.trim(), cls: el.className, pressed: el.getAttribute('aria-pressed'), ratio: Math.round(value * 100) / 100 });
+    }
+    return {
+      bar: document.getElementById('gc-unread')?.dataset.gcTheme ?? null,
+      slots: [...new Set([...document.querySelectorAll('span.gc-chips')].map((slot) => slot.dataset.gcTheme ?? null))],
+      checked: checked.length,
+      pressed: checked.filter((item) => item.pressed === 'true').length,
+      failing: checked.filter((item) => item.ratio < 4.5),
+    };
+  });
+}
+
+async function assertTheme(page, theme) {
+  await page.waitForFunction((expected) => document.getElementById('gc-unread')?.dataset.gcTheme === expected, theme, {
+    timeout: 5000,
+  });
+  const report = await themeReport(page);
+  assert.equal(report.bar, theme, `bar follows Gmail's ${theme} theme`);
+  assert.deepEqual(report.slots, [theme], `every chip slot follows Gmail's ${theme} theme`);
+  assert.ok(report.checked >= 8 && report.pressed >= 2, `measured the bar and pressed chips in ${theme}`);
+  assert.deepEqual(report.failing, [], `every bar and chip text reaches AA in ${theme}`);
+  return report;
+}
+
 async function shootFilteredGmail(page) {
+  const themes = {};
   for (const theme of THEMES) {
     const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
+    await page.emulateMedia({ colorScheme: theme === 'dark' ? 'light' : 'dark' });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(url);
     await page.waitForSelector('#gc-unread [data-gc-filter="label:money"]', { timeout: 15000 });
     await page.locator('#gc-unread [data-gc-filter="label:money"]').click();
+    await settle(page);
+    themes[theme] = await assertTheme(page, theme);
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await settle(page);
       await page.screenshot({ path: join(outDir, `gmail-filtered-${theme}-${width}.png`), fullPage: true });
     }
   }
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  await assertTheme(page, 'light');
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  await assertTheme(page, 'dark');
+  await page.emulateMedia({ colorScheme: null });
+  return { themes, liveSwitch: true };
 }
 
 rmSync(outDir, { recursive: true, force: true });
@@ -397,7 +493,7 @@ try {
 
   const filtered = await checkFilter(page, worker, rows, tbodyHtml(html), version);
   const readFiltered = await checkReadRows(page, worker, rows, read);
-  await shootFilteredGmail(page);
+  const theme = await shootFilteredGmail(page);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
 
   const popup = await context.newPage();
@@ -444,7 +540,7 @@ try {
 
   console.log(
     JSON.stringify(
-      { badges, chips, filtered, readFiltered, storageRead, testFromTab, oversized, providerCalls, searchChecked, outDir },
+      { badges, chips, filtered, readFiltered, theme, storageRead, testFromTab, oversized, providerCalls, searchChecked, outDir },
       null,
       2
     )

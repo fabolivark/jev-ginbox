@@ -26,6 +26,7 @@ export type Settings = {
   enabled: boolean;
   threshold: number;
   privacyAck: boolean;
+  classifyRead: boolean;
 } & Record<ViewSettingKey, boolean>;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   threshold: 0.7,
   privacyAck: false,
+  classifyRead: false,
   viewInbox: true,
   viewTabs: true,
   viewSearch: false,
@@ -51,6 +53,7 @@ export const POPUP_SETTING_KEYS = [
   'threshold',
   'privacyAck',
   'labels',
+  'classifyRead',
   ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
 ] as const;
 

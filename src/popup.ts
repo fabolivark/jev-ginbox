@@ -16,6 +16,7 @@ import {
 } from './shared';
 import { canTestConnection, isGmailUrl, popupStatusText, testHintText } from './status';
 import { testResultText } from './errors';
+import { isSetupPage } from './setup';
 
 const CACHE_PREFIX = 'crit:';
 const CHIP_HUES = 8;
@@ -528,5 +529,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   authFailed = changes.authFailed.newValue;
   updateStatus();
 });
+
+if (isSetupPage(location.search)) {
+  document.documentElement.classList.add('setup');
+  document.title = 'Jev Inbox setup';
+}
 
 void load();

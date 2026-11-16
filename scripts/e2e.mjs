@@ -477,6 +477,152 @@ async function shootFilteredGmail(page) {
   return { themes, liveSwitch: true };
 }
 
+async function contrastOf(page, selector) {
+  const { color, backgrounds } = await page.locator(selector).first().evaluate((el) => {
+    const backgrounds = [];
+    for (let node = el; node !== null; node = node.parentElement) backgrounds.push(getComputedStyle(node).backgroundColor);
+    return { color: getComputedStyle(el).color, backgrounds };
+  });
+  const { contrastRatio, effectiveBackground, parseColor } = await import(join(root, 'src', 'theme.ts'));
+  return Math.round(contrastRatio(parseColor(color), effectiveBackground(backgrounds)) * 100) / 100;
+}
+
+async function checkBarError(context, worker, rows, version) {
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const target = rows[rows.length - 1];
+  await worker.evaluate((key) => chrome.storage.local.remove(key), `crit:${target.threadId}|${target.lastMessageId}|${version}`);
+  await page.goto(GMAIL_URL);
+  const error = page.locator('#gc-unread', { hasText: 'The provider refused the request (status 400).' });
+  await error.waitFor({ timeout: 15000 });
+  const text = await page.locator('#gc-unread').innerText();
+  assert.doesNotMatch(text, /e2e: provider calls are refused/, 'the bar never shows the raw provider message');
+  assert.doesNotMatch(text, /Classification request failed/, 'the bar maps a 400 to plain text');
+  await page.screenshot({ path: join(outDir, 'gmail-error-1440.png') });
+  await page.close();
+  return text.match(/The provider[^\n]*/)[0];
+}
+
+async function labelState(popup) {
+  return popup.evaluate(() =>
+    [...document.querySelectorAll('#labels .label-card')].map((card) => {
+      const fields = [...card.querySelectorAll('input, textarea')];
+      const describedBy = fields.map((field) => field.getAttribute('aria-describedby')).find((id) => id !== null);
+      return {
+        invalid: fields.map((field) => field.getAttribute('aria-invalid')),
+        message: describedBy === undefined ? null : document.getElementById(describedBy)?.textContent ?? null,
+      };
+    })
+  );
+}
+
+async function storedLabels(worker) {
+  return worker.evaluate(() => chrome.storage.local.get('labels').then((stored) => stored.labels));
+}
+
+async function openPopup(popup, extensionId) {
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+}
+
+async function makeInvalidLabel(popup) {
+  await popup.locator('#addLabel').click();
+  const card = popup.locator('#labels .label-card').last();
+  await card.locator('input').fill('Travel');
+  await popup.locator('#labelCount').click();
+  return card;
+}
+
+async function checkPopupStates(popup, worker, extensionId) {
+  await openPopup(popup, extensionId);
+  const headings = await popup.locator('.section h2').allTextContents();
+  assert.ok(headings.includes('Strictness') && !headings.includes('Sensitivity'), 'the threshold section reads Strictness');
+  assert.equal(await popup.locator('#threshold').getAttribute('aria-label'), 'Strictness', 'the slider is named Strictness');
+  const strictHint = await popup.locator('#threshold ~ .hint').innerText();
+  assert.match(strictHint, /^Higher shows only/, 'higher means stricter');
+
+  await popup.locator('#testBtn').click();
+  await popup.waitForFunction(() => document.getElementById('testBtn')?.textContent === 'Test connection');
+  const testText = await popup.locator('#testResult').innerText();
+  // A popup opened as a tab is refused `test` by the worker, so this shows the refused outcome;
+  // the provider status mapping is covered by tests/errors.test.ts and by checkBarError below.
+  assert.equal(testText, 'Connection test failed.', 'the popup shows a refused test as plain text');
+  const testContrast = await contrastOf(popup, '#testResult');
+
+  const card = await makeInvalidLabel(popup);
+  let state = await labelState(popup);
+  assert.deepEqual(state.at(-1), { invalid: [null, 'true'], message: 'Add a description to save this label.' }, 'the new label flags its description');
+  const issueContrast = await contrastOf(popup, '.label-issue:not([hidden])');
+  await popup.locator('#labels textarea').first().fill('Residence permits and IND letters');
+  await popup.locator('#labelCount').click();
+  await popup.waitForTimeout(200);
+  let labels = await storedLabels(worker);
+  assert.deepEqual(labels.map((label) => label.id), LABELS.map((label) => label.id), 'the invalid label does not block the others');
+  assert.equal(labels[0].description, 'Residence permits and IND letters', 'a valid edit saves next to an invalid label');
+
+  await popup.locator('#labels input').nth(1).fill('');
+  await popup.locator('#labelCount').click();
+  await popup.waitForTimeout(200);
+  state = await labelState(popup);
+  assert.deepEqual(state[1].invalid, ['true', null], 'emptying a saved name flags it');
+  assert.equal((await storedLabels(worker))[1].name, 'Money', 'a saved label keeps its saved version while invalid');
+  await popup.locator('#labels input').nth(1).fill('Money');
+  assert.deepEqual((await labelState(popup))[1], { invalid: [null, null], message: null }, 'the flag clears as soon as it is fixed');
+
+  await card.locator('textarea').fill('Flights and hotel bookings');
+  assert.deepEqual((await labelState(popup)).at(-1), { invalid: [null, null], message: null }, 'fixing the new label clears it');
+  await popup.locator('#labelCount').click();
+  await popup.waitForTimeout(200);
+  labels = await storedLabels(worker);
+  assert.equal(labels.length, LABELS.length + 1, 'the fixed label saves');
+  assert.deepEqual(labels.slice(0, LABELS.length).map((label) => label.id), LABELS.map((label) => label.id), 'ids never change');
+  await worker.evaluate((items) => chrome.storage.local.set({ labels: items }), LABELS);
+
+  await popup.locator('#clear').click();
+  assert.equal(await popup.locator('#clear').innerText(), 'Confirm clear', 'the armed Clear cache button says Confirm clear');
+  assert.equal(await popup.locator('#clear').getAttribute('aria-label'), 'Confirm clear cache', 'the armed button is named');
+  await popup.waitForTimeout(2700);
+  assert.equal(await popup.locator('#clear').innerText(), 'Clear cache', 'the button disarms on its own');
+
+  const states = {
+    'invalid-label': async () => {
+      await makeInvalidLabel(popup);
+    },
+    error: async () => {
+      await popup.locator('#testBtn').click();
+      await popup.waitForFunction(() => document.getElementById('testResult')?.textContent !== '');
+    },
+    'armed-clear': async () => {
+      await popup.locator('#clear').click();
+      await popup.evaluate(() => window.scrollTo(0, 0));
+    },
+  };
+  const contrast = { testError: { light: testContrast }, labelIssue: { light: issueContrast } };
+  for (const theme of THEMES) {
+    await popup.emulateMedia({ colorScheme: theme });
+    for (const [name, setup] of Object.entries(states)) {
+      for (const width of WIDTHS) {
+        await popup.setViewportSize({ width, height: 900 });
+        await openPopup(popup, extensionId);
+        await setup();
+        await popup.waitForFunction(() => document.getAnimations().length === 0);
+        await popup.screenshot({ path: join(outDir, `popup-${name}-${theme}-${width}.png`), fullPage: true });
+      }
+    }
+    await openPopup(popup, extensionId);
+    await makeInvalidLabel(popup);
+    contrast.labelIssue[theme] = await contrastOf(popup, '.label-issue:not([hidden])');
+    await popup.locator('#testBtn').click();
+    await popup.waitForFunction(() => document.getElementById('testResult')?.textContent !== '');
+    contrast.testError[theme] = await contrastOf(popup, '#testResult');
+  }
+  await popup.emulateMedia({ colorScheme: null });
+  for (const [name, ratios] of Object.entries(contrast)) {
+    for (const [theme, ratio] of Object.entries(ratios)) assert.ok(ratio >= 4.5, `${name} reaches AA in ${theme} (${ratio})`);
+  }
+  return { headings, testText, contrast };
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -714,6 +860,8 @@ try {
   const searchChecked = await popup.locator('#viewSearch').isChecked();
   assert.equal(searchChecked, false, 'Search is off by default in the popup');
   assert.equal(await popup.locator('#viewInbox').isChecked(), true, 'popup still reads storage');
+  const popupStates = await checkPopupStates(popup, worker, extensionId);
+  const barError = await checkBarError(context, worker, rows, version);
 
   for (const theme of THEMES) {
     await popup.emulateMedia({ colorScheme: theme });
@@ -756,7 +904,7 @@ try {
 
   console.log(
     JSON.stringify(
-      { badges, chips, icons, filtered, readFiltered, readDispatch, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
+      { badges, chips, icons, filtered, readFiltered, readDispatch, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, outDir },
       null,
       2
     )

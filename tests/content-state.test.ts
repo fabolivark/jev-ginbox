@@ -99,6 +99,11 @@ test('contentChanges ignores changes the content script does not use', () => {
   assert.equal(contentChanges({ apiKeyHint: { newValue: 'eway' } }), undefined);
 });
 
+test('the auth failure record never reaches the content script', () => {
+  assert.equal(contentChanges({ authFailed: { newValue: 'gateway' } }), undefined);
+  assert.equal('authFailed' in contentState({ ...stored, authFailed: 'gateway' }).settings, false);
+});
+
 test('isChangedMessage accepts what contentChanges builds and rejects the rest', () => {
   assert.equal(isChangedMessage(contentChanges({ enabled: { newValue: false } })), true);
   assert.equal(isChangedMessage({ type: 'changed', changes: {} }), false);

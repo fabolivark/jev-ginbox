@@ -33,6 +33,7 @@ import {
   shownLabels,
   type RowFilter,
 } from './filter';
+import { pendingRow, type PendingRow } from './status';
 import { parseColor, themeFromBackgrounds, type GmailTheme } from './theme';
 
 type Entry = {
@@ -816,8 +817,8 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
   return slot;
 }
 
-function chipSignature(classification: Classification | undefined, failureCount: number): string {
-  if (classification === undefined) return `p:${failureCount}`;
+function chipSignature(classification: Classification | undefined, pending: PendingRow): string {
+  if (classification === undefined) return `p:${pending}`;
   let signature = `c:${isCritical(classification, threshold)}|${threshold}|${keyVersion}|`;
   for (const label of labels) {
     const probability = classification.labels[label.id];
@@ -827,8 +828,8 @@ function chipSignature(classification: Classification | undefined, failureCount:
   return signature;
 }
 
-function chipHasContent(classification: Classification | undefined): boolean {
-  if (classification === undefined) return true;
+function chipHasContent(classification: Classification | undefined, pending: PendingRow): boolean {
+  if (classification === undefined) return pending !== 'none';
   if (isCritical(classification, threshold)) return true;
   return shownLabels(classification, labels, threshold).length > 0;
 }
@@ -843,23 +844,23 @@ function renderChips(): void {
       continue;
     }
     const classification = classifications.get(key);
-    const failureCount = failures.get(key)?.failureCount ?? 0;
-    if (!chipHasContent(classification)) {
+    const pending = pendingRow(failures.get(key)?.failureCount ?? 0, halted);
+    if (!chipHasContent(classification, pending)) {
       row.querySelector('span.gc-chips')?.remove();
       continue;
     }
     const slot = chipSlot(row);
     if (slot === null) continue;
-    const signature = chipSignature(classification, failureCount);
+    const signature = chipSignature(classification, pending);
     if (slot.dataset.gcSig === signature) continue;
     slot.dataset.gcSig = signature;
     slot.textContent = '';
     if (classification === undefined) {
-      if (failureCount > 0) {
-        const pending = document.createElement('span');
-        pending.className = 'gc-pending';
-        pending.textContent = 'retrying';
-        slot.appendChild(pending);
+      if (pending === 'retrying') {
+        const marker = document.createElement('span');
+        marker.className = 'gc-pending';
+        marker.textContent = 'retrying';
+        slot.appendChild(marker);
       } else {
         const dot = document.createElement('span');
         dot.className = 'gc-dot';

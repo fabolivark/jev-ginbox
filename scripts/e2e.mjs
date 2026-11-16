@@ -1098,7 +1098,7 @@ try {
     typesafe: /TypeSafe key, it goes to TypeSafe only/,
     labels: /Label names and descriptions are sent too, so keep sensitive information out of them/,
     read: /"Also classify read mail" sends the same fields of read emails/,
-    cache: /Results are cached in this browser/,
+    cache: /Results and the sender, subject and date of classified emails are kept in this browser for the Manage page and never sent anywhere/,
   };
   for (const [name, pattern] of Object.entries(disclosures)) {
     assert.match(bullets.join(' ').replace(/\s+/g, ' '), pattern, `the notice discloses ${name}`);

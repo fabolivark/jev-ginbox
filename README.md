@@ -64,7 +64,7 @@ The filter covers only the rows Gmail has loaded in the list you are looking at,
 
 The bar's "Select in Gmail" group has one button per label present in the list, plus Critical, each with the number of rows that carry it. Click one and the extension ticks Gmail's own checkbox on every loaded row with that chip, so Gmail's toolbar (Delete, Archive, Mark as read, Move to) then acts on exactly those rows. The extension never deletes, archives, or moves mail itself; Gmail does, when you press its button.
 
-Only classified rows that show the chip are ticked: unclassified rows, rows still loading or retrying, and rows the active filter hides are left alone, and rows you already ticked stay ticked, so you can add a second label to the same selection. The bar shows how many rows are selected in Gmail and a Clear selection button that unticks them all. Like the filter, it covers only the rows Gmail has loaded, not the whole mailbox. The buttons work from the keyboard with Tab, Enter and Space.
+Only classified rows that show the chip are ticked: unclassified rows, rows still loading or retrying, and rows the active filter hides when you press the button are left alone, and rows you already ticked stay ticked, so you can add a second label to the same selection. A row ticked earlier stays ticked when a filter later hides it, Gmail's toolbar still acts on it, and the selected count includes it. The bar shows how many rows are selected in Gmail and a Clear selection button that unticks them all. Like the filter, it covers only the rows Gmail has loaded, not the whole mailbox. The buttons work from the keyboard with Tab, Enter and Space.
 
 ## Managing classified mail
 

@@ -170,13 +170,20 @@
         gap: 8px;
         margin: 16px;
       }
-      .notice p {
+      .notice-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
         margin: 0;
+        padding-left: 18px;
       }
       .notice-actions {
         display: flex;
         align-items: center;
         gap: 12px;
+      }
+      .notice-actions .hint-link {
+        align-self: center;
       }
       .welcome {
         display: none;
@@ -565,17 +572,24 @@
     </header>
 
     <div id="privacyNotice" class="card notice" hidden>
-      <p>
-        Jev Inbox sends the sender, subject, snippet and date of unread emails in the list currently
-        loaded to Jev to classify them. The snippet is the first part of the email body; the rest of
-        the body is never sent. With a Vercel AI Gateway key, Vercel forwards each request to
-        TypeSafe; with a TypeSafe key, it goes to TypeSafe only. Your label names and descriptions
-        are sent with each classification as criteria, so do not put sensitive information in them.
-        If you turn on "Also classify read mail", the same fields of read emails in the loaded list
-        are sent too. Results are cached in this browser.
-      </p>
+      <h2 id="noticeTitle">Before anything is sent</h2>
+      <ul class="notice-list" aria-labelledby="noticeTitle">
+        <li>
+          The sender, subject, snippet and date of unread emails in the loaded list go to Jev. The
+          snippet is the first part of the email body; the rest is never sent.
+        </li>
+        <li>
+          With a Vercel AI Gateway key, Vercel forwards each request to TypeSafe; with a TypeSafe
+          key, it goes to TypeSafe only. Label names and descriptions are sent too, so keep
+          sensitive information out of them.
+        </li>
+        <li>
+          "Also classify read mail" sends the same fields of read emails too. Results are cached in
+          this browser.
+        </li>
+      </ul>
       <div class="notice-actions">
-        <button id="gotIt" class="primary" type="button">Got it</button>
+        <button id="gotIt" class="primary" type="button">Accept</button>
         <a
           class="hint-link"
           href="https://github.com/fabolivark/jev-ginbox/blob/main/PRIVACY.md"

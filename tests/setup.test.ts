@@ -12,26 +12,35 @@ const DONE = { text: '', title: 'Jev Inbox' };
 const TODO = { text: '!', title: 'Jev Inbox: finish setup' };
 
 test('the badge asks to finish setup until the notice is accepted', () => {
-  assert.deepEqual(setupBadge({}, false), TODO);
-  assert.deepEqual(setupBadge({ apiKey: 'k' }, false), TODO);
-  assert.deepEqual(setupBadge({ privacyAck: 'yes', apiKey: 'k' }, false), TODO);
-  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: 'k' }, false), DONE);
+  assert.deepEqual(setupBadge({}), TODO);
+  assert.deepEqual(setupBadge({ apiKey: 'k' }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: 'yes', apiKey: 'k' }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: 'k' }), DONE);
 });
 
 test('the badge asks for the key of the selected provider', () => {
-  assert.deepEqual(setupBadge({ privacyAck: true }, false), TODO);
-  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: '' }, false), TODO);
-  assert.deepEqual(setupBadge({ privacyAck: true, typesafeApiKey: 'k' }, false), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: '' }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true, typesafeApiKey: 'k' }), TODO);
   assert.deepEqual(
-    setupBadge({ privacyAck: true, provider: 'typesafe', typesafeApiKey: 'k' }, false),
+    setupBadge({ privacyAck: true, provider: 'typesafe', typesafeApiKey: 'k' }),
     DONE
   );
-  assert.deepEqual(setupBadge({ privacyAck: true, provider: 'typesafe', apiKey: 'k' }, false), TODO);
-  assert.deepEqual(setupBadge({ privacyAck: true, provider: 'bogus', apiKey: 'k' }, false), DONE);
+  assert.deepEqual(setupBadge({ privacyAck: true, provider: 'typesafe', apiKey: 'k' }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true, provider: 'bogus', apiKey: 'k' }), DONE);
 });
 
-test('the badge asks to finish setup after a 401 or 403', () => {
-  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: 'k' }, true), TODO);
+test('the badge asks to finish setup while the selected provider is in authFailed', () => {
+  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: 'k', authFailed: 'gateway' }), TODO);
+  assert.deepEqual(setupBadge({ privacyAck: true, apiKey: 'k', authFailed: 'typesafe' }), DONE);
+  assert.deepEqual(
+    setupBadge({ privacyAck: true, provider: 'typesafe', typesafeApiKey: 'k', authFailed: 'typesafe' }),
+    TODO
+  );
+});
+
+test('a change to authFailed recomputes the badge', () => {
+  assert.equal(touchesSetup(['authFailed']), true);
 });
 
 test('only a fresh install opens the setup tab', () => {

@@ -37,11 +37,8 @@ const GMAIL_TABS = 'https://mail.google.com/*';
 
 const BADGE_COLOR = '#c5221f';
 
-// A 401/403 lives only for this worker's lifetime; any change to a setup key clears it.
-let authFailed = false;
-
 async function refreshBadge(): Promise<void> {
-  const badge = setupBadge(await chrome.storage.local.get([...SETUP_KEYS]), authFailed);
+  const badge = setupBadge(await chrome.storage.local.get([...SETUP_KEYS]));
   await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
   await chrome.action.setBadgeText({ text: badge.text });
   await chrome.action.setTitle({ title: badge.title });
@@ -51,12 +48,6 @@ function updateBadge(): void {
   void refreshBadge().catch((error: unknown) => {
     console.error('badge update failed', error);
   });
-}
-
-function setAuthFailed(failed: boolean): void {
-  if (authFailed === failed) return;
-  authFailed = failed;
-  updateBadge();
 }
 
 function openSetup(): Promise<chrome.tabs.Tab> {
@@ -78,10 +69,7 @@ void chrome.storage.local
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
-  if (touchesSetup(Object.keys(changes))) {
-    authFailed = false;
-    updateBadge();
-  }
+  if (touchesSetup(Object.keys(changes))) updateBadge();
   const message = contentChanges(changes);
   if (message === undefined) return;
   void chrome.tabs.query({ url: GMAIL_TABS }).then((tabs) => {
@@ -201,7 +189,7 @@ async function handle(
   return { ok: true, results, errors };
 }
 
-// `authFailed` names the provider whose last call was rejected; only the popup reads it.
+// `authFailed` names the provider whose last call was rejected; the popup and the badge read it, Gmail never does.
 async function recordAuth(current: unknown, provider: Provider, outcome: AuthOutcome): Promise<void> {
   const next = nextAuthFailed(current, provider, outcome);
   if (next === undefined) return;

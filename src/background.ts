@@ -10,10 +10,11 @@ import {
 } from './setup';
 import {
   CACHE_PREFIX,
+  cacheEntry,
   cacheVersion,
+  classificationOf,
   contentChanges,
   contentState,
-  isClassification,
   isProvider,
   threadKey,
   type ClassifyError,
@@ -155,8 +156,8 @@ async function handle(
   const stored = await chrome.storage.local.get([...tasks.values()].map((t) => t.storeKey));
   const results: Record<string, Classification> = {};
   for (const task of tasks.values()) {
-    const hit = stored[task.storeKey];
-    if (isClassification(hit)) results[task.key] = hit;
+    const hit = classificationOf(stored[task.storeKey]);
+    if (hit !== undefined) results[task.key] = hit;
   }
   const fresh = [...tasks.values()].filter((task) => results[task.key] === undefined);
 
@@ -225,11 +226,11 @@ async function resolveClassification(
   provider: Provider
 ): Promise<Classification> {
   const stored = await chrome.storage.local.get(storeKey);
-  const hit = stored[storeKey];
-  if (isClassification(hit)) return hit;
+  const hit = classificationOf(stored[storeKey]);
+  if (hit !== undefined) return hit;
   const classification = await classifyEmail(email, apiKey, labels, provider);
   try {
-    await chrome.storage.local.set({ [storeKey]: { ...classification, ts: Date.now() } });
+    await chrome.storage.local.set({ [storeKey]: cacheEntry(classification, email, Date.now()) });
   } catch (error) {
     console.error('cache write failed', error);
   }

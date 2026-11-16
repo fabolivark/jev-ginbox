@@ -16,6 +16,7 @@ import {
 } from './shared';
 import { canTestConnection, isGmailUrl, popupStatusText, testHintText } from './status';
 import { testResultText } from './errors';
+import { isSetupPage } from './setup';
 
 const CACHE_PREFIX = 'crit:';
 const CHIP_HUES = 8;
@@ -146,6 +147,10 @@ function updateStatus(): void {
     keyRejected: authFailed === field.provider,
     onGmail,
   });
+}
+
+function updatePaused(): void {
+  document.body.classList.toggle('paused', !enabled.checked);
 }
 
 function updateTestRow(): void {
@@ -411,6 +416,7 @@ async function load(): Promise<void> {
   );
   updateKeyRows();
   enabled.checked = stored.enabled !== false;
+  updatePaused();
   classifyRead.checked =
     typeof stored.classifyRead === 'boolean' ? stored.classifyRead : DEFAULT_SETTINGS.classifyRead;
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
@@ -476,6 +482,7 @@ for (const field of [keyFields.gateway, keyFields.typesafe]) {
 
 enabled.addEventListener('change', () => {
   updateStatus();
+  updatePaused();
   void chrome.storage.local.set({ enabled: enabled.checked }).then(() => showSaved());
 });
 
@@ -528,5 +535,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   authFailed = changes.authFailed.newValue;
   updateStatus();
 });
+
+if (isSetupPage(location.search)) {
+  document.documentElement.classList.add('setup');
+  document.title = 'Jev Inbox setup';
+}
 
 void load();

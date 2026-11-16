@@ -1,6 +1,14 @@
 import { classifyEmail, testConnection } from './jev';
 import { parseRequest } from './requests';
 import {
+  SETUP_KEYS,
+  SETUP_PAGE,
+  opensSetupOnInstall,
+  setupBadge,
+  touchesSetup,
+  type OpenSetupResult,
+} from './setup';
+import {
   CACHE_PREFIX,
   cacheVersion,
   contentChanges,
@@ -27,6 +35,32 @@ const inflight = new Map<string, Promise<Classification>>();
 
 const GMAIL_TABS = 'https://mail.google.com/*';
 
+const BADGE_COLOR = '#c5221f';
+
+async function refreshBadge(): Promise<void> {
+  const badge = setupBadge(await chrome.storage.local.get([...SETUP_KEYS]));
+  await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+  await chrome.action.setBadgeText({ text: badge.text });
+  await chrome.action.setTitle({ title: badge.title });
+}
+
+function updateBadge(): void {
+  void refreshBadge().catch((error: unknown) => {
+    console.error('badge update failed', error);
+  });
+}
+
+function openSetup(): Promise<chrome.tabs.Tab> {
+  return chrome.tabs.create({ url: chrome.runtime.getURL(SETUP_PAGE) });
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
+  updateBadge();
+  if (opensSetupOnInstall(details.reason)) void openSetup();
+});
+
+chrome.runtime.onStartup.addListener(updateBadge);
+
 void chrome.storage.local
   .setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
   .catch((error: unknown) => {
@@ -35,6 +69,7 @@ void chrome.storage.local
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
+  if (touchesSetup(Object.keys(changes))) updateBadge();
   const message = contentChanges(changes);
   if (message === undefined) return;
   void chrome.tabs.query({ url: GMAIL_TABS }).then((tabs) => {
@@ -56,9 +91,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 async function handle(
   message: unknown,
   sender: chrome.runtime.MessageSender
-): Promise<ClassifyResult | StateResult | TestResult> {
+): Promise<ClassifyResult | StateResult | TestResult | OpenSetupResult> {
   const parsed = parseRequest(message, sender, chrome.runtime.id);
   if (parsed === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  if (parsed.type === 'openSetup') {
+    await openSetup();
+    return { ok: true } satisfies OpenSetupResult;
+  }
   if (parsed.type === 'state') {
     const stored = await chrome.storage.local.get(null);
     return { ok: true, ...contentState(stored) } satisfies StateResult;
@@ -150,7 +189,7 @@ async function handle(
   return { ok: true, results, errors };
 }
 
-// `authFailed` names the provider whose last call was rejected; only the popup reads it.
+// `authFailed` names the provider whose last call was rejected; the popup and the badge read it, Gmail never does.
 async function recordAuth(current: unknown, provider: Provider, outcome: AuthOutcome): Promise<void> {
   const next = nextAuthFailed(current, provider, outcome);
   if (next === undefined) return;

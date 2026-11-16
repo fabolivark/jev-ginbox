@@ -170,13 +170,64 @@
         gap: 8px;
         margin: 16px;
       }
-      .notice p {
+      .notice-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
         margin: 0;
+        padding-left: 18px;
       }
       .notice-actions {
         display: flex;
         align-items: center;
         gap: 12px;
+      }
+      .notice-actions .hint-link {
+        align-self: center;
+      }
+      .welcome {
+        display: none;
+      }
+      /* popup.html?setup=1 is the same page opened as a tab on install: the popup
+         column becomes a centered card under a short welcome. */
+      :root.setup {
+        background: var(--surface);
+      }
+      :root.setup body {
+        width: min(380px, 100%);
+        max-height: none;
+        margin: 40px auto;
+        overflow: visible;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+      }
+      :root.setup .header {
+        position: static;
+      }
+      :root.setup .welcome {
+        display: block;
+        padding: 20px 16px 4px;
+      }
+      .welcome h1 {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .welcome p {
+        margin: 0;
+        color: var(--muted);
+      }
+      @media (max-width: 420px) {
+        :root.setup body {
+          margin: 0 auto;
+          border: 0;
+          border-radius: 0;
+        }
+      }
+      /* Paused: the settings stay usable but read as off; the header keeps full strength. */
+      body.paused .section,
+      body.paused .footer {
+        opacity: 0.5;
       }
       .section {
         display: flex;
@@ -507,6 +558,10 @@
     </style>
   </head>
   <body>
+    <div class="welcome">
+      <h1>Welcome to Jev Inbox</h1>
+      <p>Read the notice, paste your provider key and test it. Then open Gmail.</p>
+    </div>
     <header class="header">
       <div class="header-top">
         <img class="brand-icon" src="assets/icon-32.png" width="20" height="20" alt="" />
@@ -522,17 +577,24 @@
     </header>
 
     <div id="privacyNotice" class="card notice" hidden>
-      <p>
-        Jev Inbox sends the sender, subject, snippet and date of unread emails in the list currently
-        loaded to Jev to classify them. The snippet is the first part of the email body; the rest of
-        the body is never sent. With a Vercel AI Gateway key, Vercel forwards each request to
-        TypeSafe; with a TypeSafe key, it goes to TypeSafe only. Your label names and descriptions
-        are sent with each classification as criteria, so do not put sensitive information in them.
-        If you turn on "Also classify read mail", the same fields of read emails in the loaded list
-        are sent too. Results are cached in this browser.
-      </p>
+      <h2 id="noticeTitle">Before anything is sent</h2>
+      <ul class="notice-list" aria-labelledby="noticeTitle">
+        <li>
+          The sender, subject, snippet and date of unread emails in the loaded list go to Jev. The
+          snippet is the first part of the email body; the rest is never sent.
+        </li>
+        <li>
+          With a Vercel AI Gateway key, Vercel forwards each request to TypeSafe; with a TypeSafe
+          key, it goes to TypeSafe only. Label names and descriptions are sent too, so keep
+          sensitive information out of them.
+        </li>
+        <li>
+          "Also classify read mail" sends the same fields of read emails too. Results are cached in
+          this browser.
+        </li>
+      </ul>
       <div class="notice-actions">
-        <button id="gotIt" class="primary" type="button">Got it</button>
+        <button id="gotIt" class="primary" type="button">Accept</button>
         <a
           class="hint-link"
           href="https://github.com/fabolivark/jev-ginbox/blob/main/PRIVACY.md"

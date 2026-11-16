@@ -29,7 +29,11 @@ npm install
 npm run build
 ```
 
-Then open `chrome://extensions`, enable Developer mode, choose "Load unpacked", and select the `dist/` folder. Open the extension popup to finish setup.
+Then open `chrome://extensions`, enable Developer mode, choose "Load unpacked", and select the `dist/` folder.
+
+### First run
+
+Installing opens a setup tab, which is the extension popup shown as a page. Read the three-point notice and accept it, pick the provider, paste its key, and run "Test connection". Nothing is sent before you accept the notice. Until the notice is accepted and the selected provider has a key, the toolbar icon carries a `!` badge ("Jev Inbox: finish setup"); it also comes back after a 401 or 403 from the provider. If Gmail is open while setup is unfinished, the bar above the list says why and offers a Finish setup button that opens the same tab. Switching the extension off dims the settings in the popup, so a paused extension is obvious at a glance.
 
 ## Getting a key
 

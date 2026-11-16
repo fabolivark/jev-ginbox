@@ -1,61 +1,70 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { chromium } from 'playwright';
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..');
-const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const storeDir = join(root, 'dev', 'store');
 const rawDir = join(storeDir, 'raw');
 const outDir = join(root, 'docs', 'store');
 
-function shoot(url, outPath, width, height, { scale = 1, scheme, virtualTime = 400 } = {}) {
-  const args = [
-    '--headless=new',
-    '--disable-gpu',
-    '--hide-scrollbars',
-    '--allow-file-access-from-files',
-    `--force-device-scale-factor=${scale}`,
-    `--screenshot=${outPath}`,
-    `--window-size=${width},${height}`,
-    `--virtual-time-budget=${virtualTime}`,
-  ];
-  if (scheme) args.push(`--blink-settings=preferredColorScheme=${scheme === 'dark' ? 0 : 1}`);
-  args.push(url);
-  execFileSync(chrome, args, { stdio: 'pipe' });
+let browser;
+try {
+  browser = await chromium.launch({ args: ['--hide-scrollbars', '--allow-file-access-from-files'] });
+} catch (error) {
+  console.error('Playwright Chromium is missing. Run npx playwright install chromium first.');
+  throw error;
 }
 
-function downsize(src, out, width, height) {
-  execFileSync('magick', [
-    src,
-    '-filter',
-    'Lanczos',
-    '-resize',
-    `${width}x${height}!`,
-    '-background',
-    'white',
-    '-alpha',
-    'remove',
-    '-alpha',
-    'off',
-    '-define',
-    'png:color-type=2',
-    out,
-  ]);
+// Waits for web fonts, every image, and two frames, so Material Symbols render as icons
+// and scene.html has placed its callout. Playwright screenshots are 8-bit RGB PNGs with
+// no alpha channel, which is what the Chrome Web Store asks for.
+async function settle(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(
+      Array.from(document.images, (img) =>
+        img.complete ? null : new Promise((done) => img.addEventListener('load', done, { once: true }))
+      )
+    );
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  });
 }
 
-function trimBottom(path, width) {
-  const geometry = execFileSync('magick', [path, '-format', '%@', 'info:'])
-    .toString()
-    .trim()
-    .match(/^(\d+)x(\d+)\+(\d+)\+(\d+)$/);
-  if (!geometry) return;
-  const bottom = Number(geometry[2]) + Number(geometry[4]) + 32;
-  execFileSync('magick', [path, '-crop', `${width}x${bottom}+0+0`, '+repage', path]);
+async function shoot(url, outPath, width, height, { scale = 1, scheme = 'light', clipToContent = false } = {}) {
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, colorScheme: scheme });
+  const page = await context.newPage();
+  await page.goto(url, { waitUntil: 'networkidle' });
+  await settle(page);
+  const options = { path: outPath };
+  if (clipToContent) {
+    const bottom = await page.evaluate(() =>
+      Math.max(
+        ...Array.from(document.body.querySelectorAll('*'), (el) =>
+          el.getClientRects().length > 0 ? el.getBoundingClientRect().bottom : 0
+        )
+      )
+    );
+    options.clip = { x: 0, y: 0, width, height: Math.ceil(bottom) + 16 };
+  }
+  await page.screenshot(options);
+  await context.close();
+}
+
+async function downsize(src, out, width, height) {
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  const data = readFileSync(src).toString('base64');
+  await page.setContent(
+    `<style>html,body{margin:0;background:#fff}img{display:block;width:${width}px;height:${height}px}</style><img src="data:image/png;base64,${data}">`
+  );
+  await settle(page);
+  await page.screenshot({ path: out });
+  await context.close();
 }
 
 function fileUrl(...segments) {
-  return `file://${join(...segments)}`;
+  return pathToFileURL(join(...segments)).href;
 }
 
 const labels = [
@@ -84,15 +93,14 @@ writeFileSync(
     )
 );
 
-function popupRender(name, state) {
+async function popupRender(name, state) {
   const encoded = Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
   const out = join(rawDir, `${name}.png`);
-  shoot(`${fileUrl(storeHtmlPath)}?state=${encoded}`, out, 380, 1400, { scale: 2, scheme: 'light', virtualTime: 800 });
-  trimBottom(out, 760);
+  await shoot(`${fileUrl(storeHtmlPath)}?state=${encoded}`, out, 380, 1400, { scale: 2, clipToContent: true });
 }
 
-popupRender('popup-set', { privacyAck: true, provider: 'gateway', apiKeyHint: 'a1b2', threshold: 0.7, labels });
-popupRender('popup-firstrun', { privacyAck: false, provider: 'gateway', labels });
+await popupRender('popup-set', { privacyAck: true, provider: 'gateway', apiKeyHint: 'a1b2', threshold: 0.7, labels });
+await popupRender('popup-firstrun', { privacyAck: false, provider: 'gateway', labels });
 
 const scenes = [
   ['hero', '01-unread-first'],
@@ -104,13 +112,12 @@ const scenes = [
 
 for (const [scene, name] of scenes) {
   const raw = join(rawDir, `${scene}@2x.png`);
-  shoot(`${fileUrl(storeDir, 'scene.html')}?scene=${scene}`, raw, 1440, 900, { scale: 2, virtualTime: 6000 });
-  downsize(raw, join(outDir, `${name}.png`), 1280, 800);
+  await shoot(`${fileUrl(storeDir, 'scene.html')}?scene=${scene}`, raw, 1440, 900, { scale: 2 });
+  await downsize(raw, join(outDir, `${name}.png`), 1280, 800);
 }
 
-shoot(`${fileUrl(storeDir, 'scene.html')}?scene=hero&nocallout=1`, join(rawDir, 'hero-clean@2x.png'), 1440, 900, {
+await shoot(`${fileUrl(storeDir, 'scene.html')}?scene=hero&nocallout=1`, join(rawDir, 'hero-clean@2x.png'), 1440, 900, {
   scale: 2,
-  virtualTime: 6000,
 });
 
 const promos = [
@@ -120,8 +127,9 @@ const promos = [
 
 for (const [size, name, width, height] of promos) {
   const raw = join(rawDir, `promo-${size}@2x.png`);
-  shoot(`${fileUrl(storeDir, 'promo.html')}?size=${size}`, raw, width, height, { scale: 2, virtualTime: 6000 });
-  downsize(raw, join(outDir, name), width, height);
+  await shoot(`${fileUrl(storeDir, 'promo.html')}?size=${size}`, raw, width, height, { scale: 2 });
+  await downsize(raw, join(outDir, name), width, height);
 }
 
+await browser.close();
 console.log('Store images written to docs/store/.');

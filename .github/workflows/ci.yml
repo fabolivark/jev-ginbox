@@ -23,6 +23,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: node scripts/e2e.mjs
+      - run: node scripts/store-images.mjs
       - if: always()
         uses: actions/upload-artifact@v4
         with:

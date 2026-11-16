@@ -32,6 +32,12 @@ test('the privacy screenshot callout says the snippet is body text', () => {
   assert.match(privacy, /callout/, 'privacy scene has a callout');
   assert.doesNotMatch(privacy, /never bodies/i);
   assert.match(privacy, /first part of the (email )?body/i);
+  assert.match(privacy, /\bread mail\b/i, 'privacy callout says read mail is sent only when turned on');
+});
+
+test('the store listing says read rows are cleared and sent again when read mail is on', () => {
+  const listing = read('docs/store-listing.md');
+  assert.match(field(listing, 'Storage and deletion'), /read rows when "Also classify read mail" is on/);
 });
 
 test('the repository links point to the fork, and only the README credits upstream', () => {

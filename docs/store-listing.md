@@ -51,7 +51,7 @@ No other hosts are requested. The extension makes no request to any server of it
 - Transfer to third parties: only to the AI provider the user selected (Vercel AI Gateway or TypeSafe), under the user's own key and account, and only for classification.
 - Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header. The popup keeps only the last four characters of each key so it can show that a key is saved without reading it back.
 - Personal communications: the sender, subject, snippet and date of unread rows, and of read rows when the user turns that on, are sent to the selected provider for classification, together with the user's label names and descriptions as criteria. The snippet is the first part of the email body, so it can carry body text such as a verification code; the rest of the body and attachments are not read or sent.
-- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, and removing the extension deletes all of it.
+- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, with its read rows when "Also classify read mail" is on, and removing the extension deletes all of it.
 
 ## Images
 

@@ -14,6 +14,7 @@ import {
   type Provider,
   type TestResult,
 } from './shared';
+import { deleteLabelText, focusAfterDelete } from './a11y';
 import { canTestConnection, isGmailUrl, popupStatusText, testHintText } from './status';
 import { testResultText } from './errors';
 import { isSetupPage } from './setup';
@@ -117,7 +118,13 @@ function showSaved(text = 'Saved'): void {
   saved.textContent = text;
   saved.classList.add('show');
   if (savedTimer !== undefined) window.clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => saved.classList.remove('show'), 1500);
+  savedTimer = window.setTimeout(() => {
+    saved.classList.remove('show');
+    // Empty once faded, so the live region announces the next save and reads nothing stale.
+    savedTimer = window.setTimeout(() => {
+      saved.textContent = '';
+    }, 200);
+  }, 1500);
 }
 
 function percent(value: number): string {
@@ -214,10 +221,10 @@ function removeKey(field: KeyField): void {
 function armConfirm(
   button: HTMLButtonElement,
   action: () => void,
-  confirmLabel: string,
+  confirmLabel: string | (() => string),
   confirmText?: string
 ): void {
-  const originalLabel = button.getAttribute('aria-label');
+  let originalLabel = button.getAttribute('aria-label');
   const originalText = button.textContent;
   const restore = (): void => {
     const timer = confirmTimers.get(button);
@@ -233,8 +240,9 @@ function armConfirm(
       action();
       return;
     }
+    originalLabel = button.getAttribute('aria-label');
     button.classList.add('confirm');
-    button.setAttribute('aria-label', confirmLabel);
+    button.setAttribute('aria-label', typeof confirmLabel === 'string' ? confirmLabel : confirmLabel());
     if (confirmText !== undefined) button.textContent = confirmText;
     confirmTimers.set(button, window.setTimeout(restore, CONFIRM_MS));
   });
@@ -274,6 +282,11 @@ function markField(field: HTMLElement, invalid: boolean, errorId: string): void 
   }
 }
 
+function focusLabelName(index: number | null): void {
+  const names = labelsEl.querySelectorAll<HTMLInputElement>('.label-card input[type="text"]');
+  (index === null ? addLabel : (names[index] ?? addLabel)).focus();
+}
+
 function renderLabels(): void {
   labelsEl.textContent = '';
   addLabel.disabled = draft.length >= MAX_LABELS;
@@ -299,6 +312,7 @@ function renderLabels(): void {
     name.addEventListener('input', () => {
       item.name = name.value;
       recheckLabel(item);
+      if (!remove.classList.contains('confirm')) remove.setAttribute('aria-label', trashName(false));
     });
     name.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') name.blur();
@@ -332,6 +346,7 @@ function renderLabels(): void {
     const issueText = document.createElement('p');
     issueText.className = 'label-issue';
     issueText.id = `label-issue-${index}`;
+    issueText.setAttribute('role', 'alert');
     const showIssue = (): void => {
       const issue = labelIssues.get(item.id);
       markField(name, issue?.name === true, issueText.id);
@@ -345,7 +360,9 @@ function renderLabels(): void {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'trash';
-    remove.setAttribute('aria-label', 'Delete label');
+    const trashName = (confirming: boolean): string =>
+      deleteLabelText(item.name, index + 1, confirming);
+    remove.setAttribute('aria-label', trashName(false));
     remove.innerHTML = TRASH_SVG;
     armConfirm(
       remove,
@@ -353,8 +370,9 @@ function renderLabels(): void {
         draft.splice(index, 1);
         renderLabels();
         saveLabels();
+        focusLabelName(focusAfterDelete(index, draft.length));
       },
-      'Confirm delete'
+      () => trashName(true)
     );
 
     fields.appendChild(name);
@@ -509,6 +527,7 @@ addLabel.addEventListener('click', () => {
   if (draft.length >= MAX_LABELS) return;
   draft.push({ id: crypto.randomUUID(), name: '', description: '' });
   renderLabels();
+  focusLabelName(draft.length - 1);
 });
 
 // Keep focus in a typed key so its `change` save cannot move the button mid-click;

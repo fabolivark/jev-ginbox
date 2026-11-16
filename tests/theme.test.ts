@@ -146,3 +146,91 @@ test('the Finish setup button uses the bar text on the list, like Clear', () => 
   assert.equal(declarations.get('color'), 'var(--gc-text)', '.gc-setup text is the AA-checked --gc-text');
   assert.equal(declarations.get('background'), 'transparent', '.gc-setup sits on the list background');
 });
+
+function hueOf(c: Rgba): { hue: number; saturation: number } {
+  const [r, g, b] = [c.r / 255, c.g / 255, c.b / 255];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  if (delta === 0) return { hue: 0, saturation };
+  const sector = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  return { hue: (sector * 60 + 360) % 360, saturation };
+}
+
+function hueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+const MIN_HUE_GAP = 30;
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`Critical uses a hue no label chip uses in ${theme}`, () => {
+    const scoped = (scope: string): Tokens => {
+      const light = tokensFor((part) => part === scope);
+      return theme === 'light' ? light : { ...light, ...tokensFor((part) => part === `${DARK} ${scope}`) };
+    };
+    const badge = scoped('.gc-badge');
+    assert.deepEqual(scoped('.gc-filter-critical'), badge, 'the bar Critical button matches the row badge');
+    for (let hue = 0; hue < 8; hue++) {
+      const label = scoped(`.gc-hue-${hue}`);
+      for (const name of ['--gc-hue-fg', '--gc-hue-bg', '--gc-hue-solid']) {
+        const where = `${theme} .gc-hue-${hue} ${name}`;
+        const own = hueOf(color(label, name, where));
+        if (own.saturation < 0.15) continue;
+        const gap = hueGap(own.hue, hueOf(color(badge, name, `${theme} .gc-badge`)).hue);
+        assert.ok(gap >= MIN_HUE_GAP, `${where} is ${gap.toFixed(0)} degrees from Critical`);
+      }
+    }
+  });
+}
+
+function popupTokens(): Record<'light' | 'dark', Tokens> {
+  const html = readFileSync('src/popup.html', 'utf8');
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html);
+  assert.ok(style !== null, 'popup.html has a style block');
+  const [lightPart, darkPart] = style[1].split('@media (prefers-color-scheme: dark)');
+  assert.ok(darkPart !== undefined, 'popup.html has dark tokens');
+  const rootTokens = (part: string): Tokens => {
+    const block = /:root\s*\{([^{}]*)\}/.exec(part);
+    assert.ok(block !== null, 'popup tokens live on :root');
+    const tokens: Tokens = {};
+    for (const declaration of block[1].split(';')) {
+      const at = declaration.indexOf(':');
+      const name = declaration.slice(0, at).trim();
+      if (at !== -1 && name.startsWith('--')) tokens[name] = declaration.slice(at + 1).trim();
+    }
+    return tokens;
+  };
+  const light = rootTokens(lightPart);
+  return { light, dark: { ...light, ...rootTokens(darkPart) } };
+}
+
+/* WCAG 1.4.11: each control boundary and the switch knob reach 3:1 against what sits next to them. */
+const POPUP_NON_TEXT: [string, string, string][] = [
+  ['--field-border', '--bg', 'input border on the page'],
+  ['--field-border', '--surface', 'input border on a label card'],
+  ['--switch-border', '--bg', 'off switch track border on the page'],
+  ['--switch-knob', '--switch-track', 'off switch knob on its track'],
+  ['--accent', '--bg', 'on switch track on the page'],
+  ['--switch-knob-on', '--accent', 'on switch knob on its track'],
+];
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`popup controls reach 3:1 non-text contrast in ${theme}`, () => {
+    const tokens = popupTokens()[theme];
+    for (const [fgName, bgName, what] of POPUP_NON_TEXT) {
+      const ratio = contrastRatio(color(tokens, fgName, theme), color(tokens, bgName, theme));
+      assert.ok(ratio >= 3, `${theme} ${what} (${fgName} on ${bgName}) is ${ratio.toFixed(2)}`);
+    }
+  });
+}
+
+test('popup styles use the non-text contrast tokens', () => {
+  const html = readFileSync('src/popup.html', 'utf8');
+  for (const name of ['--field-border', '--switch-border', '--switch-track', '--switch-knob', '--switch-knob-on']) {
+    assert.ok(html.includes(`var(${name})`), `popup.html uses var(${name})`);
+  }
+});

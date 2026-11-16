@@ -17,7 +17,36 @@ const LABELS = [
   { id: 'visa', name: 'Visa', description: 'Residence permits, IND letters, immigration appointments' },
   { id: 'money', name: 'Money', description: 'Invoices, payments, bank statements' },
   { id: 'home', name: 'Home', description: 'Rent, utilities, landlord and building notices' },
+  { id: 'school', name: 'School', description: 'Teachers, school trips and report cards' },
 ];
+
+const AXE_SOURCE = readFileSync(join(root, 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
+const AXE_BLOCKING = ['serious', 'critical'];
+
+// Injected with evaluate, which the extension pages' CSP does not block. `context` scopes
+// the run; null means the whole document.
+async function axeCheck(page, context, where) {
+  await page.evaluate(AXE_SOURCE);
+  const { passes, violations } = await page.evaluate(async (scope) => {
+    const result = await window.axe.run(scope ?? document, { resultTypes: ['violations'] });
+    const passes = result.passes.map((rule) => rule.id);
+    return { passes, violations: result.violations.map((violation) => ({
+      id: violation.id,
+      impact: violation.impact,
+      nodes: violation.nodes.length,
+      targets: violation.nodes.slice(0, 3).map((node) => node.target.join(' ')),
+    })) };
+  }, context);
+  assert.ok(passes.includes('button-name') && passes.includes('color-contrast'), `axe checked buttons and contrast in ${where}`);
+  const blocking = violations.filter((violation) => AXE_BLOCKING.includes(violation.impact));
+  assert.deepEqual(blocking, [], `axe finds no serious or critical violation in ${where}`);
+  const counts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+  for (const violation of violations) counts[violation.impact] += violation.nodes;
+  return { counts, passedRules: passes.length, rules: violations.map((violation) => `${violation.id}:${violation.impact}`) };
+}
+
+// Our nodes only: the bar and the chip slots. The rest of the fixture is Gmail-like markup.
+const GMAIL_AXE_SCOPE = { include: [['#gc-unread'], ['.gc-chips']] };
 
 function fixtureHtml() {
   return readFileSync(join(root, 'dev', 'demo.html'), 'utf8')
@@ -434,11 +463,14 @@ async function checkHalted(page, worker, rows, version, providerCalls) {
     window.e2eMarkerSeen = false;
     const list = document.querySelector('.Cp');
     new MutationObserver(() => {
+      const dot = list.querySelector('tr.zA .gc-dot');
+      if (dot !== null) window.e2eDotName = `${dot.getAttribute('role')}:${dot.getAttribute('aria-label')}`;
       if (list.querySelector('tr.zA .gc-dot, tr.zA .gc-pending') !== null) window.e2eMarkerSeen = true;
     }).observe(list, { childList: true, subtree: true });
   });
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
   await page.waitForFunction(() => window.e2eMarkerSeen === true, null, { timeout: 10000 });
+  assert.equal(await page.evaluate(() => window.e2eDotName), 'img:Classifying', 'the loading dot is named Classifying');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator('#gc-unread', { hasText: 'The provider rejected the API key.' }).waitFor({ timeout: 15000 });
   await settle(page);
@@ -453,16 +485,61 @@ async function checkHalted(page, worker, rows, version, providerCalls) {
   return { setupMessage: SETUP_MESSAGE, retryingRows: 0, authFailed: 'gateway' };
 }
 
-async function shootFilteredGmail(page) {
+async function shootFilteredGmail(page, firstThread) {
   const themes = {};
+  const axe = {};
   for (const theme of THEMES) {
     const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
     await page.emulateMedia({ colorScheme: theme === 'dark' ? 'light' : 'dark' });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(url);
     await page.waitForSelector('#gc-unread [data-gc-filter="label:money"]', { timeout: 15000 });
+    await settle(page);
+    const critical = rowSelector(firstThread);
+    assert.deepEqual(
+      await page.locator(`${critical} .gc-chips > *`).evaluateAll((els) => els.map((el) => el.className)),
+      ['gc-badge', 'gc-chip gc-hue-0', 'gc-chip gc-hue-3'],
+      'the critical row shows Critical next to the hue-3 School chip'
+    );
+    const [badgeBg, hue3Bg] = await page.evaluate((selector) => {
+      const bg = (el) => getComputedStyle(el).backgroundColor;
+      return [bg(document.querySelector(`${selector} .gc-badge`)), bg(document.querySelector(`${selector} .gc-hue-3`))];
+    }, critical);
+    assert.notEqual(badgeBg, hue3Bg, `Critical and the hue-3 chip differ in ${theme}`);
+    const live = await page.evaluate(() => {
+      const region = document.querySelector('#gc-unread > .gc-live');
+      return {
+        role: region?.getAttribute('role'),
+        politeness: region?.getAttribute('aria-live'),
+        count: region?.querySelector('.gc-count') !== null,
+        controls: region?.querySelectorAll('button').length,
+      };
+    });
+    assert.deepEqual(live, { role: 'status', politeness: 'polite', count: true, controls: 0 }, 'the bar count is a polite live region without the controls');
+    axe[`gmail-${theme}`] = await axeCheck(page, GMAIL_AXE_SCOPE, `the Gmail bar and chips in ${theme}`);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await page.screenshot({ path: join(outDir, `gmail-ready-${theme}-${width}.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => {
+      const region = document.querySelector('#gc-unread > .gc-live');
+      window.e2eLive = { region, mutations: 0 };
+      new MutationObserver((records) => {
+        window.e2eLive.mutations += records.length;
+      }).observe(region, { childList: true, subtree: true, characterData: true });
+    });
     await page.locator('#gc-unread [data-gc-filter="label:money"]').click();
     await settle(page);
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        same: document.querySelector('#gc-unread > .gc-live') === window.e2eLive.region,
+        mutations: window.e2eLive.mutations,
+      })),
+      { same: true, mutations: 0 },
+      'a bar re-render with the same count leaves the live region untouched'
+    );
     themes[theme] = await assertTheme(page, theme);
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
@@ -475,7 +552,65 @@ async function shootFilteredGmail(page) {
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   await assertTheme(page, 'dark');
   await page.emulateMedia({ colorScheme: null });
-  return { themes, liveSwitch: true };
+  return { themes, axe, liveSwitch: true };
+}
+
+const focusedLabel = (popup) =>
+  popup.evaluate(() => {
+    const el = document.activeElement;
+    return el instanceof HTMLInputElement ? `${el.getAttribute('aria-label')}=${el.value}` : (el?.id ?? null);
+  });
+
+const trashNames = (popup) =>
+  popup.locator('.label-card .trash').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+
+async function checkLabelsEditor(popup) {
+  await popup.setViewportSize({ width: 1440, height: 900 });
+  await popup.emulateMedia({ colorScheme: 'light' });
+  await popup.reload();
+  await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+  const live = await popup.evaluate(() => ({
+    lang: document.documentElement.lang,
+    saved: document.getElementById('saved')?.getAttribute('role'),
+    test: document.getElementById('testResult')?.getAttribute('role'),
+    labelIssue: document.querySelector('.label-card .label-issue')?.getAttribute('role'),
+  }));
+  assert.deepEqual(live, { lang: 'en', saved: 'status', test: 'status', labelIssue: 'alert' }, 'popup lang and live regions');
+  const names = LABELS.map((label) => `Delete label ${label.name}`);
+  assert.deepEqual(await trashNames(popup), names, 'each trash button names its label');
+  const firstName = popup.locator('.label-card input[type="text"]').first();
+  await firstName.fill('Visas');
+  assert.equal((await trashNames(popup))[0], 'Delete label Visas', 'the trash name follows the typed name');
+  await firstName.fill('Visa');
+
+  await popup.locator('#addLabel').click();
+  assert.equal(await focusedLabel(popup), `Label ${LABELS.length + 1} name=`, 'Add label focuses the new name field');
+  assert.equal((await trashNames(popup)).at(-1), `Delete unnamed label ${LABELS.length + 1}`, 'an unnamed label has a fallback trash name');
+
+  const trash = (index) => popup.locator('.label-card .trash').nth(index);
+  await trash(1).click();
+  assert.equal(await trash(1).getAttribute('aria-label'), 'Confirm delete label Money', 'the armed trash names its label');
+  assert.equal(
+    await popup.locator('.label-card').last().locator('.label-issue').innerText(),
+    'Add a name and a description to save this label.',
+    'the incomplete label is reported'
+  );
+  await trash(1).click();
+  assert.equal(await focusedLabel(popup), 'Label 2 name=Home', 'deleting a label focuses the next one');
+
+  const last = LABELS.length - 1;
+  await trash(last).click();
+  await trash(last).click();
+  assert.equal(await focusedLabel(popup), `Label ${last} name=School`, 'deleting the last label focuses the previous one');
+
+  while ((await popup.locator('.label-card').count()) > 0) {
+    await trash(0).focus();
+    await popup.keyboard.press('Enter');
+    await popup.keyboard.press('Enter');
+  }
+  assert.equal(await focusedLabel(popup), 'addLabel', 'deleting the only label focuses Add label');
+  await popup.waitForFunction(() => document.getElementById('saved')?.textContent === 'Saved');
+  return { trashNames: names, focus: 'next, previous, Add label' };
 }
 
 async function contrastOf(page, selector) {
@@ -687,8 +822,17 @@ async function checkSetupTab(context, worker, setupUrl) {
   assert.deepEqual(layout[1440], { left: 530, width: 380, overflow: false }, 'the setup column is centred at 1440');
   assert.deepEqual(layout[320], { left: 0, width: 320, overflow: false }, 'the setup column fills 320');
   await shootPopup(tab, setupUrl, 'setup');
+  const axe = {};
+  for (const theme of THEMES) {
+    await tab.emulateMedia({ colorScheme: theme });
+    await tab.setViewportSize({ width: 1440, height: 900 });
+    await tab.goto(setupUrl);
+    await tab.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+    await tab.waitForFunction(() => document.getAnimations().length === 0);
+    axe[theme] = await axeCheck(tab, null, `the setup tab in ${theme}`);
+  }
   await tab.close();
-  return { url: setupUrl, installBadge, testFromSetup: testFromSetup.error, layout };
+  return { url: setupUrl, installBadge, testFromSetup: testFromSetup.error, layout, axe };
 }
 
 async function checkFinishSetup(context, page, worker, rows, version, setupUrl, providerCalls) {
@@ -796,6 +940,7 @@ try {
         visa: index === 0 ? 0.9 : 0.05,
         money: index === 1 || index === 2 ? 0.8 : 0.05,
         home: index === 1 ? 0.8 : 0.05,
+        school: index === 0 ? 0.85 : 0.05,
       },
       ts: Date.now(),
     };
@@ -807,7 +952,7 @@ try {
     seed[`crit:${key}`] = {
       criticalProbability: index === 0 ? 0.95 : 0.1,
       urgencyScore: index === 0 ? 3 : 0,
-      labels: { visa: 0.05, money: index === 0 ? 0.8 : 0.05, home: 0.05 },
+      labels: { visa: 0.05, money: index === 0 ? 0.8 : 0.05, home: 0.05, school: 0.05 },
       ts: Date.now(),
     };
   });
@@ -855,7 +1000,7 @@ try {
 
   const filtered = await checkFilter(page, worker, rows, tbodyHtml(html), version);
   const readFiltered = await checkReadRows(page, worker, rows, read);
-  const theme = await shootFilteredGmail(page);
+  const theme = await shootFilteredGmail(page, rows[0].threadId);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
   const readDispatch = await checkReadDispatch(page, worker, read, version, providerCalls);
   const finishSetup = await checkFinishSetup(context, page, worker, rows, version, setupUrl, providerCalls);
@@ -914,6 +1059,18 @@ try {
 
   const popupUrl = `chrome-extension://${extensionId}/popup.html`;
 
+  const popupAxe = {};
+  async function axePopup(state) {
+    for (const theme of THEMES) {
+      await popup.emulateMedia({ colorScheme: theme });
+      await popup.setViewportSize({ width: 1440, height: 900 });
+      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+      await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+      await popup.waitForFunction(() => document.getAnimations().length === 0);
+      popupAxe[`${state}-${theme}`] = await axeCheck(popup, null, `the ${state} popup in ${theme}`);
+    }
+  }
+
   const statusText = () => popup.locator('#statusLine').innerText();
   const statusIs = (text) =>
     popup.waitForFunction((expected) => document.getElementById('statusLine')?.textContent === expected, text, {
@@ -922,6 +1079,7 @@ try {
 
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: false }));
   await shootPopup(popup, popupUrl, 'notice');
+  await axePopup('notice');
   assert.equal(await statusText(), 'Accept the notice below to start', 'status asks for the notice first');
   assert.equal(await popup.locator('#testBtn').isDisabled(), true, 'Test is disabled before the notice');
   const notice = await popup.locator('#privacyNotice').innerText();
@@ -967,6 +1125,7 @@ try {
   await statusIs('Ready. Open Gmail to use it.');
   await setClassifyRead(worker, true);
   await shootPopup(popup, popupUrl, 'ready');
+  await axePopup('ready');
   assert.equal(await statusText(), 'Ready. Open Gmail to use it.', 'status says the active tab is not Gmail');
   assert.equal(await popup.locator('#testBtn').isDisabled(), false, 'Test is enabled with a saved key');
   assert.equal(await popup.locator('#classifyRead').isChecked(), true, 'popup shows the stored read toggle');
@@ -1044,10 +1203,11 @@ try {
   await popup.locator('label[for="viewSearch"]').click();
   assert.equal(await popup.locator('#viewSearch').isChecked(), true, 'dimmed settings stay usable');
   await worker.evaluate(() => chrome.storage.local.set({ enabled: true, viewSearch: false }));
+  const labelsEditor = await checkLabelsEditor(popup);
 
   console.log(
     JSON.stringify(
-      { setupTab, readyBadge, badges, chips, icons, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
+      { setupTab, readyBadge, badges, chips, icons, popupAxe, labelsEditor, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
       null,
       2
     )

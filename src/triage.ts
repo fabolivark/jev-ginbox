@@ -53,15 +53,18 @@ export function triageThreads(stored: Record<string, unknown>): TriageData {
   const provider = isProvider(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider;
   const threshold = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
   const suffix = `|${cacheVersion(labels, provider)}`;
-  const threads: TriageThread[] = [];
-  let missing = 0;
+  // A conversation that got a new message has one entry per last message id: keep the newest.
+  const byThread = new Map<string, TriageThread>();
+  const withoutSender = new Set<string>();
   for (const [storageKey, value] of Object.entries(stored)) {
     if (!storageKey.startsWith(CACHE_PREFIX) || !storageKey.endsWith(suffix)) continue;
     const classification = classificationOf(value);
     if (classification === undefined) continue;
+    const key = storageKey.slice(CACHE_PREFIX.length, -suffix.length);
+    const threadId = key.split('|')[0] ?? key;
     const meta = threadMetaOf(value);
     if (meta === undefined || meta.fromEmail.length === 0) {
-      missing += 1;
+      withoutSender.add(threadId);
       continue;
     }
     let labelId: string | null = null;
@@ -75,16 +78,19 @@ export function triageThreads(stored: Record<string, unknown>): TriageData {
       }
     }
     const ts = typeof value === 'object' && value !== null && 'ts' in value && typeof value.ts === 'number' ? value.ts : 0;
-    threads.push({
+    const current = byThread.get(threadId);
+    if (current !== undefined && current.ts > ts) continue;
+    byThread.set(threadId, {
       ...meta,
-      key: storageKey.slice(CACHE_PREFIX.length, -suffix.length),
+      key,
       labelId,
       urgency: classification.urgencyScore,
       critical: classification.criticalProbability >= threshold,
       ts,
     });
   }
-  return { threads, missing };
+  const missing = [...withoutSender].filter((threadId) => !byThread.has(threadId)).length;
+  return { threads: [...byThread.values()], missing };
 }
 
 export function filterThreads(threads: TriageThread[], filter: TriageFilter): TriageThread[] {

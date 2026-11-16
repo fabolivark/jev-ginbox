@@ -185,3 +185,13 @@ test('gmailAccounts lists the signed-in account numbers of open Gmail tabs, in o
   );
   assert.deepEqual(gmailAccounts([]), []);
 });
+
+test('triageThreads counts a conversation once, keeping its newest entry, when a new message gave it a second key', () => {
+  const { threads } = triageThreads({
+    ...stored,
+    [`crit:t1|m1b|${version}`]: entry('billing@shop.example', 'Receipt 1 reply', 60, { money: 0.9 }),
+  });
+  const t1 = threads.filter((t) => t.key.startsWith('t1|'));
+  assert.equal(threads.length, 5);
+  assert.deepEqual(t1.map((t) => [t.key, t.subject]), [['t1|m1b', 'Receipt 1 reply']]);
+});

@@ -33,6 +33,13 @@
   position: relative;
 }
 
+.gc-live {
+  display: inline-flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
 .gc-count {
   color: var(--gc-muted);
 }

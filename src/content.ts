@@ -734,27 +734,20 @@ function renderBar(): void {
       : null;
   const setupFocused =
     focused instanceof HTMLElement && bar.contains(focused) && focused.dataset.gcSetup !== undefined;
-  bar.textContent = '';
-  const count = document.createElement('span');
-  count.className = 'gc-count';
-  count.textContent = `${total} unread`;
-  bar.appendChild(count);
+  const live = liveRegion(bar);
+  for (const child of [...bar.children]) if (child !== live) child.remove();
+  const statusText =
+    status === 0
+      ? null
+      : classifyRead
+        ? `Classifying ${remaining} of ${classifiable} loaded rows`
+        : `Classifying ${remaining} of ${total} unread`;
+  renderLive(live, `${total} unread`, statusText, errorMessage);
   if (status > 0) {
-    const statusEl = document.createElement('span');
-    statusEl.className = 'gc-status';
-    statusEl.textContent = classifyRead
-      ? `Classifying ${remaining} of ${classifiable} loaded rows`
-      : `Classifying ${remaining} of ${total} unread`;
-    bar.appendChild(statusEl);
     const progress = document.createElement('span');
     progress.className = 'gc-progress';
+    progress.setAttribute('aria-hidden', 'true');
     bar.appendChild(progress);
-  }
-  if (errorMessage) {
-    const err = document.createElement('span');
-    err.className = 'gc-error';
-    err.textContent = errorMessage;
-    bar.appendChild(err);
   }
   if (halted) {
     const setup = document.createElement('button');
@@ -808,6 +801,39 @@ function renderBar(): void {
     target?.focus();
   }
   if (setupFocused) bar.querySelector<HTMLElement>('[data-gc-setup]')?.focus();
+}
+
+function liveRegion(root: HTMLElement): HTMLElement {
+  const existing = root.querySelector<HTMLElement>(':scope > .gc-live');
+  if (existing !== null) return existing;
+  const live = document.createElement('span');
+  live.className = 'gc-live';
+  live.setAttribute('role', 'status');
+  live.setAttribute('aria-live', 'polite');
+  root.prepend(live);
+  return live;
+}
+
+// The count, progress and error are the bar's polite live region; the filter controls
+// sit outside it. Its nodes are only replaced when their text changes, so a re-render
+// with the same numbers announces nothing.
+function renderLive(live: HTMLElement, count: string, status: string | null, error: string | null): void {
+  const signature = `${count}|${status ?? ''}|${error ?? ''}`;
+  if (live.dataset.gcSig === signature) return;
+  live.dataset.gcSig = signature;
+  live.textContent = '';
+  const parts: [string, string | null][] = [
+    ['gc-count', count],
+    ['gc-status', status],
+    ['gc-error', error],
+  ];
+  for (const [className, text] of parts) {
+    if (text === null || text.length === 0) continue;
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = text;
+    live.appendChild(span);
+  }
 }
 
 function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
@@ -871,6 +897,8 @@ function renderChips(): void {
       } else {
         const dot = document.createElement('span');
         dot.className = 'gc-dot';
+        dot.setAttribute('role', 'img');
+        dot.setAttribute('aria-label', 'Classifying');
         slot.appendChild(dot);
       }
       continue;

@@ -82,7 +82,7 @@ test('npm run package zips a clean build with only the extension files', () => {
     for (const devFile of ['demo.js', 'stub.js', 'assets/icon.svg', 'stray.txt']) {
       assert.ok(!entries.includes(devFile), `zip has no ${devFile}`);
     }
-    assert.deepEqual(entries, [...manifestFiles(manifest), 'popup.js'].sort());
+    assert.deepEqual(entries, [...manifestFiles(manifest), 'popup.js', 'manage.html', 'manage.js'].sort());
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

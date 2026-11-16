@@ -11,6 +11,7 @@ const GMAIL_URL = 'https://mail.google.com/mail/u/0/#inbox';
 const WIDTHS = [1440, 768, 390, 320];
 const THEMES = ['light', 'dark'];
 const PROVIDER_HOLD_MS = 400;
+const REJECTED_KEY = 'e2e-rejected-key';
 
 const LABELS = [
   { id: 'visa', name: 'Visa', description: 'Residence permits, IND letters, immigration appointments' },
@@ -401,6 +402,56 @@ async function checkReadDispatch(page, worker, read, version, providerCalls) {
   return { email, requests: sent().length };
 }
 
+const SETUP_MESSAGE = 'Open Jev Inbox to finish setup.';
+
+async function checkHalted(page, worker, rows, version, providerCalls) {
+  const before = providerCalls.length;
+  const cacheKeys = rows.map((row) => `crit:${row.threadId}|${row.lastMessageId}|${version}`);
+  await worker.evaluate(
+    async ({ keys, apiKey }) => {
+      await chrome.storage.local.set({ privacyAck: false, apiKey });
+      await chrome.storage.local.remove(keys);
+    },
+    { keys: cacheKeys, apiKey: REJECTED_KEY }
+  );
+  for (const theme of THEMES) {
+    const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(url);
+    await page.locator('#gc-unread', { hasText: SETUP_MESSAGE }).waitFor({ timeout: 15000 });
+    await settle(page);
+    assert.equal(await page.locator('.Cp tr.zA', { hasText: 'retrying' }).count(), 0, `no halted row says retrying in ${theme}`);
+    assert.equal(await page.locator('.Cp tr.zA .gc-dot').count(), 0, `no halted row shows a loading dot in ${theme}`);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await page.screenshot({ path: join(outDir, `gmail-noack-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  assert.equal(providerCalls.length, before, 'nothing reaches the provider before the notice is accepted');
+  await page.evaluate(() => {
+    window.e2eMarkerSeen = false;
+    const list = document.querySelector('.Cp');
+    new MutationObserver(() => {
+      if (list.querySelector('tr.zA .gc-dot, tr.zA .gc-pending') !== null) window.e2eMarkerSeen = true;
+    }).observe(list, { childList: true, subtree: true });
+  });
+  await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
+  await page.waitForFunction(() => window.e2eMarkerSeen === true, null, { timeout: 10000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('#gc-unread', { hasText: '401/403' }).waitFor({ timeout: 15000 });
+  await settle(page);
+  assert.equal(await page.locator('.Cp tr.zA', { hasText: 'retrying' }).count(), 0, 'no row says retrying after a 401');
+  assert.equal(
+    await worker.evaluate(() => chrome.storage.local.get('authFailed').then((stored) => stored.authFailed)),
+    'gateway',
+    'the worker records the rejected provider'
+  );
+  await page.screenshot({ path: join(outDir, 'gmail-rejected-dark-1440.png'), fullPage: true });
+  await worker.evaluate(() => chrome.storage.local.set({ apiKey: 'e2e-placeholder-key' }));
+  return { setupMessage: SETUP_MESSAGE, retryingRows: 0, authFailed: 'gateway' };
+}
+
 async function shootFilteredGmail(page) {
   const themes = {};
   for (const theme of THEMES) {
@@ -438,9 +489,10 @@ const context = await chromium.launchPersistentContext('', {
 const providerCalls = [];
 await context.route(/^https:\/\/(ai-gateway\.vercel\.sh|api\.typesafe\.ai)\//, async (route) => {
   providerCalls.push({ url: route.request().url(), body: route.request().postData() ?? '' });
+  const rejected = Object.values(route.request().headers()).some((value) => value.includes(REJECTED_KEY));
   await new Promise((done) => setTimeout(done, PROVIDER_HOLD_MS));
   return route.fulfill({
-    status: 400,
+    status: rejected ? 401 : 400,
     contentType: 'application/json',
     body: JSON.stringify({ error: { message: 'e2e: provider calls are refused' } }),
   });
@@ -462,6 +514,7 @@ try {
   const seed = {
     provider: 'gateway',
     apiKey: 'e2e-placeholder-key',
+    apiKeyHint: '-key',
     enabled: true,
     threshold: 0.7,
     privacyAck: true,
@@ -537,7 +590,7 @@ try {
   const theme = await shootFilteredGmail(page);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
   const readDispatch = await checkReadDispatch(page, worker, read, version, providerCalls);
-  await page.close();
+  const halted = await checkHalted(page, worker, rows, version, providerCalls);
 
   const popup = await context.newPage();
 
@@ -603,8 +656,16 @@ try {
     }
   }
 
+  const statusText = () => popup.locator('#statusLine').innerText();
+  const statusIs = (text) =>
+    popup.waitForFunction((expected) => document.getElementById('statusLine')?.textContent === expected, text, {
+      timeout: 10000,
+    });
+
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: false }));
   await shootPopup('notice');
+  assert.equal(await statusText(), 'Accept the notice below to start', 'status asks for the notice first');
+  assert.equal(await popup.locator('#testBtn').isDisabled(), true, 'Test is disabled before the notice');
   const notice = await popup.locator('#privacyNotice').innerText();
   assert.equal(await popup.locator('#privacyNotice').isVisible(), true, 'first-run notice shows');
   assert.doesNotMatch(notice, /bodies are never sent/i, 'notice does not deny sending body text');
@@ -617,8 +678,25 @@ try {
     assert.ok(href.startsWith('https://github.com/fabolivark/jev-ginbox'), `popup link points to the fork: ${href}`);
   }
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
+  await shootPopup('rejected');
+  assert.equal(await statusText(), 'The key was rejected. Replace it below.', 'status says the key was rejected');
+  await popup.locator('#apiKeyReplace').click();
+  await popup.locator('#apiKey').fill('e2e-placeholder-key');
+  await popup.locator('#apiKey').press('Enter');
+  await statusIs('Ready. Open Gmail to use it.');
+  assert.equal(
+    await worker.evaluate(() => chrome.storage.local.get('authFailed').then((stored) => stored.authFailed)),
+    undefined,
+    'saving a new key clears the rejection'
+  );
+  await worker.evaluate(() => chrome.storage.local.set({ authFailed: 'gateway' }));
+  await statusIs('The key was rejected. Replace it below.');
+  await worker.evaluate(() => chrome.storage.local.remove('authFailed'));
+  await statusIs('Ready. Open Gmail to use it.');
   await setClassifyRead(worker, true);
   await shootPopup('ready');
+  assert.equal(await statusText(), 'Ready. Open Gmail to use it.', 'status says the active tab is not Gmail');
+  assert.equal(await popup.locator('#testBtn').isDisabled(), false, 'Test is enabled with a saved key');
   assert.equal(await popup.locator('#classifyRead').isChecked(), true, 'popup shows the stored read toggle');
   const readHint = await popup.locator('label[for="classifyRead"]').innerText();
   assert.match(readHint, /Also classify read mail/, 'popup names the read toggle');
@@ -637,9 +715,48 @@ try {
   assert.equal(searchChecked, false, 'Search is off by default in the popup');
   assert.equal(await popup.locator('#viewInbox').isChecked(), true, 'popup still reads storage');
 
+  for (const theme of THEMES) {
+    await popup.emulateMedia({ colorScheme: theme });
+    for (const width of WIDTHS) {
+      await popup.setViewportSize({ width, height: 900 });
+      await page.bringToFront();
+      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+      await statusIs('Active on this Gmail tab');
+      await popup.bringToFront();
+      await popup.waitForFunction(() => document.getAnimations().length === 0);
+      await popup.screenshot({ path: join(outDir, `popup-active-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  await page.close();
+
+  await worker.evaluate(() => chrome.storage.local.remove(['apiKey', 'apiKeyHint']));
+  await shootPopup('nokey');
+  assert.equal(await statusText(), 'Add a key to start', 'status asks for a key');
+  assert.equal(await popup.locator('#testBtn').isDisabled(), true, 'Test is disabled with no key');
+  assert.equal(await popup.locator('#testHint').innerText(), 'Paste a key above to test it.', 'the hint asks for a key');
+  await worker.evaluate(() => {
+    self.e2eTestKeys = [];
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.type !== 'test') return;
+      void chrome.storage.local.get('apiKey').then((stored) => self.e2eTestKeys.push(stored.apiKey ?? null));
+    });
+  });
+  await popup.locator('#apiKey').fill('e2e-typed-key');
+  assert.equal(await popup.locator('#testBtn').isDisabled(), false, 'a typed key enables Test');
+  await popup.locator('#testBtn').click();
+  await popup.waitForFunction(() => document.getElementById('testBtn')?.textContent === 'Test connection');
+  assert.deepEqual(
+    await worker.evaluate(() => self.e2eTestKeys),
+    ['e2e-typed-key'],
+    'Test saves the typed key before the test message arrives'
+  );
+  await worker.evaluate(() => chrome.storage.local.set({ enabled: false }));
+  await shootPopup('paused');
+  assert.equal(await statusText(), 'Paused', 'status says paused first');
+
   console.log(
     JSON.stringify(
-      { badges, chips, icons, filtered, readFiltered, readDispatch, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
+      { badges, chips, icons, filtered, readFiltered, readDispatch, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
       null,
       2
     )

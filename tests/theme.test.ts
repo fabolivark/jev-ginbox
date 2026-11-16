@@ -186,3 +186,51 @@ for (const theme of ['light', 'dark'] as const) {
     }
   });
 }
+
+function popupTokens(): Record<'light' | 'dark', Tokens> {
+  const html = readFileSync('src/popup.html', 'utf8');
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html);
+  assert.ok(style !== null, 'popup.html has a style block');
+  const [lightPart, darkPart] = style[1].split('@media (prefers-color-scheme: dark)');
+  assert.ok(darkPart !== undefined, 'popup.html has dark tokens');
+  const rootTokens = (part: string): Tokens => {
+    const block = /:root\s*\{([^{}]*)\}/.exec(part);
+    assert.ok(block !== null, 'popup tokens live on :root');
+    const tokens: Tokens = {};
+    for (const declaration of block[1].split(';')) {
+      const at = declaration.indexOf(':');
+      const name = declaration.slice(0, at).trim();
+      if (at !== -1 && name.startsWith('--')) tokens[name] = declaration.slice(at + 1).trim();
+    }
+    return tokens;
+  };
+  const light = rootTokens(lightPart);
+  return { light, dark: { ...light, ...rootTokens(darkPart) } };
+}
+
+/* WCAG 1.4.11: each control boundary and the switch knob reach 3:1 against what sits next to them. */
+const POPUP_NON_TEXT: [string, string, string][] = [
+  ['--field-border', '--bg', 'input border on the page'],
+  ['--field-border', '--surface', 'input border on a label card'],
+  ['--switch-border', '--bg', 'off switch track border on the page'],
+  ['--switch-knob', '--switch-track', 'off switch knob on its track'],
+  ['--accent', '--bg', 'on switch track on the page'],
+  ['--switch-knob-on', '--accent', 'on switch knob on its track'],
+];
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`popup controls reach 3:1 non-text contrast in ${theme}`, () => {
+    const tokens = popupTokens()[theme];
+    for (const [fgName, bgName, what] of POPUP_NON_TEXT) {
+      const ratio = contrastRatio(color(tokens, fgName, theme), color(tokens, bgName, theme));
+      assert.ok(ratio >= 3, `${theme} ${what} (${fgName} on ${bgName}) is ${ratio.toFixed(2)}`);
+    }
+  });
+}
+
+test('popup styles use the non-text contrast tokens', () => {
+  const html = readFileSync('src/popup.html', 'utf8');
+  for (const name of ['--field-border', '--switch-border', '--switch-track', '--switch-knob', '--switch-knob-on']) {
+    assert.ok(html.includes(`var(${name})`), `popup.html uses var(${name})`);
+  }
+});

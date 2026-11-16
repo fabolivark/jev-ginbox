@@ -24,5 +24,6 @@ export function testResultText(result: TestResult): string {
   if (result.ok) return 'Connected';
   if (result.error === 'provider') return providerErrorText(result.status);
   if (result.error === 'needs_ack') return 'Accept the first-run notice in the popup before testing.';
-  return 'No API key saved.';
+  if (result.error === 'missing_key') return 'No API key saved.';
+  return 'Connection test failed.';
 }

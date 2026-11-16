@@ -32,6 +32,7 @@ test('testResultText covers every test outcome', () => {
     'Accept the first-run notice in the popup before testing.'
   );
   assert.equal(testResultText({ ok: false, error: 'missing_key' }), 'No API key saved.');
+  assert.equal(testResultText({ ok: false, error: 'failed' }), 'Connection test failed.');
   assert.equal(testResultText({ ok: false, error: 'provider', status: 429 }), providerErrorText(429));
   assert.equal(testResultText({ ok: false, error: 'provider' }), providerErrorText(undefined));
 });

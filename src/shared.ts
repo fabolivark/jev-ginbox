@@ -127,7 +127,8 @@ export type ChangedMessage = {
 
 export type TestResult =
   | { ok: true }
-  | { ok: false; message: string; error?: 'needs_ack' };
+  | { ok: false; error: 'needs_ack' | 'missing_key' }
+  | { ok: false; error: 'provider'; status?: number };
 
 export function labelsHash(labels: LabelConfig[]): string {
   let h = 5381;

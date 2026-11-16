@@ -13,6 +13,7 @@ import {
   routeKey,
   threadKey,
   viewFromHash,
+  type ClassifyError,
   type ClassifyResult,
   type Classification,
   type EmailState,
@@ -35,6 +36,7 @@ import {
 } from './filter';
 import { pendingRow, type PendingRow } from './status';
 import { parseColor, themeFromBackgrounds, type GmailTheme } from './theme';
+import { isAuthStatus, rowFailureText } from './errors';
 
 type Entry = {
   key: string;
@@ -666,7 +668,7 @@ async function dispatchPending(): Promise<void> {
     }
     let applied = false;
     let authFailure = false;
-    let rowFailure = false;
+    const rowFailures: (ClassifyError | undefined)[] = [];
     for (const entry of batch) {
       const classification = response.results[entry.key];
       if (classification !== undefined) {
@@ -675,19 +677,13 @@ async function dispatchPending(): Promise<void> {
         applied = true;
         continue;
       }
-      rowFailure = true;
       const failure = response.errors[entry.key];
+      rowFailures.push(failure);
       recordFailure(entry.key);
-      if (failure !== undefined && (failure.status === 401 || failure.status === 403)) {
-        authFailure = true;
-      }
+      if (isAuthStatus(failure?.status)) authFailure = true;
     }
-    if (authFailure) {
-      halted = true;
-      errorMessage = 'Classification failed with 401/403. Check the API key in the popup.';
-    } else if (rowFailure) {
-      errorMessage = 'Classification request failed.';
-    }
+    if (authFailure) halted = true;
+    if (rowFailures.length > 0) errorMessage = rowFailureText(rowFailures);
     if (applied) animateNextOrder = true;
     render();
   }

@@ -11,6 +11,7 @@ import {
   type TestResult,
 } from './shared';
 import { canTestConnection, isGmailUrl, popupStatusText, testHintText } from './status';
+import { testResultText } from './errors';
 
 const CACHE_PREFIX = 'crit:';
 const CHIP_HUES = 8;
@@ -334,13 +335,8 @@ async function runTestConnection(): Promise<void> {
   try {
     await saveKey(selectedField());
     const response = (await chrome.runtime.sendMessage({ type: 'test' })) as TestResult;
-    if (response.ok) {
-      testResult.className = 'test-result ok';
-      testResult.textContent = 'Connected';
-    } else {
-      testResult.className = 'test-result error';
-      testResult.textContent = response.message;
-    }
+    testResult.className = response.ok ? 'test-result ok' : 'test-result error';
+    testResult.textContent = testResultText(response);
   } catch {
     testResult.className = 'test-result error';
     testResult.textContent = 'Connection test failed.';

@@ -17,7 +17,7 @@ document.head.appendChild(style);
 
 const CROP_SECTIONS: Record<string, string[]> = {
   labels: ['Connection', 'Labels'],
-  key: ['Connection', 'Show on', 'Sensitivity'],
+  key: ['Connection', 'Show on', 'Strictness'],
   privacy: [],
 };
 

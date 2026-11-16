@@ -42,6 +42,7 @@ const clearPicks = element('clearPicks', HTMLButtonElement);
 
 let labels: LabelConfig[] = [];
 let threads: TriageThread[] = [];
+let missing = 0;
 const picked = new Set<string>();
 
 function option(value: string, text: string): HTMLOptionElement {
@@ -198,14 +199,19 @@ function render(): void {
   const senders = new Set(threads.map((t) => t.fromEmail.toLowerCase())).size;
   summary.textContent =
     threads.length === 0
-      ? 'Nothing classified yet.'
+      ? missing > 0
+        ? 'No classified thread has its sender saved yet.'
+        : 'Nothing classified yet.'
       : `${plural(threads.length, 'classified thread', 'classified threads')} from ${plural(senders, 'sender', 'senders')}, stored in this browser.`;
   groupsEl.replaceChildren(...groups.map(renderGroup));
   emptyEl.hidden = groups.length > 0;
   emptyEl.textContent =
-    threads.length === 0
-      ? 'Open Gmail with Jev Inbox on; the threads it classifies are listed here.'
-      : 'No thread matches these filters.';
+    threads.length > 0
+      ? 'No thread matches these filters.'
+      : missing > 0
+        ? `${plural(missing, 'thread was', 'threads were')} classified before Jev Inbox kept the sender, so ${missing === 1 ? 'it is' : 'they are'} not listed. Threads classified from now on show up here. To list the loaded rows sooner, Clear cache in the popup: they are classified again, which sends them to the provider again.`
+        : 'Open Gmail with Jev Inbox on; the threads it classifies are listed here.';
+  missingEl.hidden = missing === 0 || threads.length === 0;
   renderSearches();
   if (focus !== undefined) groupsEl.querySelector<HTMLInputElement>(focus)?.focus();
 }
@@ -247,10 +253,10 @@ async function load(): Promise<void> {
   labels = storedLabels(stored);
   const data = triageThreads(stored);
   threads = data.threads;
+  missing = data.missing;
   fillFilters();
   await fillAccounts();
-  missingEl.hidden = data.missing === 0;
-  missingEl.textContent = `${plural(data.missing, 'classification was', 'classifications were')} saved without a sender and ${data.missing === 1 ? 'is' : 'are'} not listed. Clear cache in the popup to classify ${data.missing === 1 ? 'it' : 'them'} again with the sender.`;
+  missingEl.textContent = `${plural(missing, 'classification was', 'classifications were')} saved without a sender and ${missing === 1 ? 'is' : 'are'} not listed. Clear cache in the popup to classify ${missing === 1 ? 'it' : 'them'} again with the sender.`;
   render();
 }
 

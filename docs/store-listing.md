@@ -23,7 +23,7 @@ Jev Inbox reorders the message list Gmail already shows. Unread mail moves above
 
 - Your views: inbox, other inbox tabs, search results, and labels and other folders, each switchable.
 - Your labels: name a label, describe what belongs under it, and Jev answers one question per label.
-- Your sensitivity: choose how confident a classification has to be before a row counts as critical.
+- Your strictness: choose how confident a classification has to be before a row counts as critical. Higher is stricter.
 - Your provider: Vercel AI Gateway or TypeSafe, with your own key.
 
 Only the unread rows in the Gmail list currently loaded are classified, plus its read rows if you turn on "Also classify read mail", only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. The snippet is the first part of the email body; the rest of the body and attachments are never read or sent. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev. The Critical badge is a model guess from text the sender wrote and can be gamed by a phishing email, so treat it as a sorting hint, not a safety signal. Results are cached in your browser. There is no account, no analytics, and no server of ours.
@@ -34,7 +34,7 @@ Jev Inbox sorts and labels the unread messages Gmail already shows in the list c
 
 ## Permission justifications
 
-- `storage`: saves your settings (provider, API keys, enabled switch, sensitivity, view toggles, first-run acknowledgement), your labels, and the classification cache, all in `chrome.storage.local` in your own browser profile.
+- `storage`: saves your settings (provider, API keys, enabled switch, strictness, view toggles, first-run acknowledgement), your labels, and the classification cache, all in `chrome.storage.local` in your own browser profile.
 - `https://mail.google.com/*`: reads the rendered message list to identify unread rows, and read rows when "Also classify read mail" is on, and their sender, subject, snippet and date, reorders those rows, and injects the status bar and label chips.
 - `https://ai-gateway.vercel.sh/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when Vercel AI Gateway is the selected provider, using the user's own key.
 - `https://api.typesafe.ai/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when TypeSafe is the selected provider, using the user's own key.

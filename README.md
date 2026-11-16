@@ -14,7 +14,7 @@ Rows are sent in batches of 20 to the service worker, which asks TypeSafe Jev fo
 - `urgency`: a score from not urgent to immediately urgent.
 - One boolean question per label, with your description as the criteria.
 
-Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. Read rows stay below the unread ones in Gmail's order even when "Also classify read mail" gives them a Critical badge. A row counts as critical when its critical probability reaches the sensitivity you set.
+Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. Read rows stay below the unread ones in Gmail's order even when "Also classify read mail" gives them a Critical badge. A row counts as critical when its critical probability reaches the Strictness you set.
 
 The bar and the chips follow Gmail's own theme, which is a Gmail setting and not the system one: the extension reads the list's background color and switches to dark colors when it is dark, with text that keeps WCAG AA contrast in both themes.
 

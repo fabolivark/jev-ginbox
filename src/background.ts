@@ -17,6 +17,7 @@ import {
   type StateResult,
   type TestResult,
 } from './shared';
+import { isAuthRejection, nextAuthFailed, type AuthOutcome } from './status';
 
 const CONCURRENCY = 8;
 const CACHE_MAX = 5000;
@@ -70,7 +71,14 @@ async function handle(
     apiKey,
     typesafeApiKey,
     privacyAck,
-  } = await chrome.storage.local.get(['provider', 'apiKey', 'typesafeApiKey', 'privacyAck']);
+    authFailed,
+  } = await chrome.storage.local.get([
+    'provider',
+    'apiKey',
+    'typesafeApiKey',
+    'privacyAck',
+    'authFailed',
+  ]);
   const provider = isProvider(storedProvider) ? storedProvider : 'gateway';
   const key = provider === 'typesafe' ? typesafeApiKey : apiKey;
   if (test) {
@@ -86,9 +94,11 @@ async function handle(
     }
     try {
       await testConnection(key, provider);
+      await recordAuth(authFailed, provider, 'accepted');
       return { ok: true } satisfies TestResult;
     } catch (error) {
       const failure = toClassifyError(error);
+      await recordAuth(authFailed, provider, isAuthRejection(failure.status) ? 'rejected' : 'other');
       return {
         ok: false,
         message:
@@ -120,6 +130,7 @@ async function handle(
   const queue = [...fresh];
   const errors: Record<string, ClassifyError> = {};
   let authAborted = false;
+  let accepted = false;
   const workers = Array.from({ length: CONCURRENCY }, async () => {
     while (queue.length > 0) {
       if (authAborted) return;
@@ -127,10 +138,11 @@ async function handle(
       if (task === undefined) return;
       try {
         results[task.key] = await classifyWithCache(task.storeKey, task.email, key, labels, provider);
+        accepted = true;
       } catch (error) {
         const failure = toClassifyError(error);
         errors[task.key] = failure;
-        if (failure.status === 401 || failure.status === 403) {
+        if (isAuthRejection(failure.status)) {
           authAborted = true;
           return;
         }
@@ -138,8 +150,22 @@ async function handle(
     }
   });
   await Promise.all(workers);
+  if (authAborted) await recordAuth(authFailed, provider, 'rejected');
+  else if (accepted) await recordAuth(authFailed, provider, 'accepted');
   if (fresh.length > 0) await pruneCache();
   return { ok: true, results, errors };
+}
+
+// `authFailed` names the provider whose last call was rejected; only the popup reads it.
+async function recordAuth(current: unknown, provider: Provider, outcome: AuthOutcome): Promise<void> {
+  const next = nextAuthFailed(current, provider, outcome);
+  if (next === undefined) return;
+  try {
+    if (next === null) await chrome.storage.local.remove('authFailed');
+    else await chrome.storage.local.set({ authFailed: next });
+  } catch (error) {
+    console.error('auth state write failed', error);
+  }
 }
 
 function classifyWithCache(

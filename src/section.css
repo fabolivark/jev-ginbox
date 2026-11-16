@@ -236,7 +236,8 @@
 button.gc-badge,
 button.gc-chip,
 .gc-filter,
-.gc-clear {
+.gc-clear,
+.gc-setup {
   appearance: none;
   font: inherit;
   line-height: inherit;
@@ -275,7 +276,8 @@ button.gc-chip[aria-pressed='true'],
   color: var(--gc-hue-on-solid);
 }
 
-.gc-clear {
+.gc-clear,
+.gc-setup {
   background: transparent;
   color: var(--gc-text);
   border: 1px solid var(--gc-outline);
@@ -283,14 +285,16 @@ button.gc-chip[aria-pressed='true'],
   padding: 0 6px;
 }
 
-.gc-clear:hover {
+.gc-clear:hover,
+.gc-setup:hover {
   border-color: var(--gc-text);
 }
 
 button.gc-badge:focus-visible,
 button.gc-chip:focus-visible,
 .gc-filter:focus-visible,
-.gc-clear:focus-visible {
+.gc-clear:focus-visible,
+.gc-setup:focus-visible {
   outline: 2px solid var(--gc-hue-fg, var(--gc-text));
   outline-offset: 1px;
 }

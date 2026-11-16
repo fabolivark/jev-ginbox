@@ -131,3 +131,18 @@ for (const theme of ['light', 'dark'] as const) {
     }
   });
 }
+
+test('the Finish setup button uses the bar text on the list, like Clear', () => {
+  const css = readFileSync('src/section.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const declarations = new Map<string, string>();
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = match[1].split(',').map((part) => part.replace(/\s+/g, ' ').trim());
+    if (!selectors.includes('.gc-setup')) continue;
+    for (const declaration of match[2].split(';')) {
+      const at = declaration.indexOf(':');
+      if (at !== -1) declarations.set(declaration.slice(0, at).trim(), declaration.slice(at + 1).trim());
+    }
+  }
+  assert.equal(declarations.get('color'), 'var(--gc-text)', '.gc-setup text is the AA-checked --gc-text');
+  assert.equal(declarations.get('background'), 'transparent', '.gc-setup sits on the list background');
+});

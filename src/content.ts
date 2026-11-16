@@ -72,7 +72,7 @@ const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
 const ANIMATION_TRANSITION = 'transform 180ms';
 const HIDDEN_ATTRIBUTE = 'data-gc-hidden';
-const CONTROL_SELECTOR = '[data-gc-filter], [data-gc-clear]';
+const CONTROL_SELECTOR = '[data-gc-filter], [data-gc-clear], [data-gc-setup]';
 const SENDER_SELECTOR = 'span[email][name]';
 const ISOLATED_EVENTS = [
   'pointerdown',
@@ -724,7 +724,7 @@ function renderBar(): void {
       ? 0
       : rowClassifications.filter((row) => matchesFilter(filter, row, labels, threshold)).length;
   const optionSignature = options.map((option) => `${option.token}:${option.count}`).join(',');
-  const signature = `${total}|${classifiable}|${status}|${errorMessage ?? ''}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
+  const signature = `${total}|${classifiable}|${status}|${errorMessage ?? ''}|${halted}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
   if (bar.dataset.gcSig === signature) return;
   bar.dataset.gcSig = signature;
   const focused = document.activeElement;
@@ -732,6 +732,8 @@ function renderBar(): void {
     focused instanceof HTMLElement && bar.contains(focused)
       ? (focused.dataset.gcFilter ?? (focused.dataset.gcClear !== undefined ? '' : null))
       : null;
+  const setupFocused =
+    focused instanceof HTMLElement && bar.contains(focused) && focused.dataset.gcSetup !== undefined;
   bar.textContent = '';
   const count = document.createElement('span');
   count.className = 'gc-count';
@@ -753,6 +755,14 @@ function renderBar(): void {
     err.className = 'gc-error';
     err.textContent = errorMessage;
     bar.appendChild(err);
+  }
+  if (halted) {
+    const setup = document.createElement('button');
+    setup.type = 'button';
+    setup.className = 'gc-setup';
+    setup.dataset.gcSetup = '';
+    setup.textContent = 'Finish setup';
+    bar.appendChild(setup);
   }
   if (options.length > 0) {
     const group = document.createElement('span');
@@ -797,6 +807,7 @@ function renderBar(): void {
       bar.querySelector<HTMLElement>(selector) ?? bar.querySelector<HTMLElement>('[data-gc-filter]');
     target?.focus();
   }
+  if (setupFocused) bar.querySelector<HTMLElement>('[data-gc-setup]')?.focus();
 }
 
 function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
@@ -913,6 +924,10 @@ function setFilter(next: RowFilter | null): void {
 }
 
 function onControl(control: HTMLElement): void {
+  if (control.dataset.gcSetup !== undefined) {
+    chrome.runtime.sendMessage({ type: 'openSetup' }).catch(() => {});
+    return;
+  }
   if (control.dataset.gcClear !== undefined) {
     setFilter(null);
     return;

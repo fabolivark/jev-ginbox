@@ -456,6 +456,7 @@ async function checkHalted(page, worker, rows, version, providerCalls) {
     await settle(page);
     assert.equal(await page.locator('.Cp tr.zA', { hasText: 'retrying' }).count(), 0, `no halted row says retrying in ${theme}`);
     assert.equal(await page.locator('.Cp tr.zA .gc-dot').count(), 0, `no halted row shows a loading dot in ${theme}`);
+    assert.equal(await page.locator('#gc-unread [data-gc-select]').count(), 0, `no Select button while every row is unclassified in ${theme}`);
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await settle(page);

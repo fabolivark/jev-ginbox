@@ -116,7 +116,7 @@ const scene = P.get('scene') || 'hero';
 const ICON = '../../assets/icon-128.png';
 const RAW = 'raw/';
 
-const L = { Visa: 0, Money: 1, Home: 2 };
+const L = { Visa: 0, Money: 1, Home: 2, Friends: 3 };
 const inbox = [
   { s: 'Plotline Weekly', sub: 'Ten tips for balcony tomatoes', sn: 'Late-season care, what to prune now, and a reader question about pots on a north-facing balcony.', d: '11:14 AM', u: 1 },
   { s: 'Northbank', sub: 'New sign-in to your account from Chrome on Mac', sn: 'If this was you, there is nothing to do. If not, lock your card and reset your password now.', d: '11:02 AM', u: 1, c: 0.9, l: ['Money'] },
@@ -125,7 +125,7 @@ const inbox = [
   { s: 'City Library', sub: 'Two books are due back on Friday', sn: 'Renew online or return them to any branch before closing time.', d: '9:57 AM', u: 1 },
   { s: 'Weather Digest', sub: 'A grey week ahead', sn: 'Rain on Tuesday and Wednesday, clearing up by the weekend.', d: '9:20 AM' },
   { s: 'Immigration Service', sub: 'Residence permit appointment: Monday 28 Sep, 09:00', sn: 'Bring your passport, the invitation letter and one recent photo. Arrive ten minutes early.', d: '8:45 AM', u: 1, c: 0.84, l: ['Visa'], a: 1 },
-  { s: 'Daniel Ortiz', sub: 'Photos from Saturday', sn: 'Finally uploaded them, the one by the canal came out great. Link inside.', d: '8:12 AM', u: 1 },
+  { s: 'Daniel Ortiz', sub: 'Photos from Saturday', sn: 'Finally uploaded them, the one by the canal came out great. Link inside.', d: '8:12 AM', u: 1, l: ['Friends'] },
   { s: 'Willow Property', sub: 'Rent for October is due on the 1st', sn: 'Pay through the tenant portal or by bank transfer with your unit number as reference.', d: 'Sep 22', u: 1, l: ['Home'] },
   { s: 'Meadow Energy', sub: 'Your September invoice is ready', sn: 'Amount due 84.20, collected by direct debit on 30 September.', d: 'Sep 22', u: 1, l: ['Money'], a: 1 },
   { s: 'Hopper Rides', sub: 'Your Tuesday evening ride', sn: 'Total 12.40, paid with the card ending 4417. Rate your driver.', d: 'Sep 22' },
@@ -177,20 +177,40 @@ function rowsHtml(rows, withChips) {
     </div>`).join('');
 }
 
+// The bar as content.ts renders it once the loaded rows are classified: the count, then
+// "Filter loaded rows" and "Select in Gmail" with one control per Critical or label match.
+function barHtml(rows) {
+  const unread = rows.filter((r) => r.u);
+  const options = [{ name: 'Critical', hue: 'gc-filter-critical', n: unread.filter((r) => r.c).length }];
+  for (const [name, hue] of Object.entries(L)) {
+    options.push({ name, hue: `gc-hue-${hue}`, n: unread.filter((r) => (r.l || []).includes(name)).length });
+  }
+  const shown = options.filter((o) => o.n > 0);
+  const filters = shown
+    .map((o) => `<button type="button" class="gc-filter ${o.hue}" aria-pressed="false">${o.name}<span class="gc-filter-count">${o.n}</span></button>`)
+    .join('');
+  const selects = shown
+    .map((o) => `<button type="button" class="gc-select-option">${o.name}<span class="gc-filter-count">${o.n}</span></button>`)
+    .join('');
+  return `<span class="gc-live"><span class="gc-count">${unread.length} unread</span></span>`
+    + `<span class="gc-filters"><span class="gc-filters-label">Filter loaded rows:</span>${filters}</span>`
+    + `<span class="gc-filters gc-select"><span class="gc-filters-label">Select in Gmail:</span>${selects}</span>`;
+}
+
 function gmailLogo() {
   return `<svg width="38" height="29" viewBox="52 42 88 66"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></svg>`;
 }
 
 const S = {
-  hero: { rows: inbox, sorted: 1, bar: '<span class="gc-count">8 unread</span>',
+  hero: { rows: inbox, sorted: 1, bar: barHtml(inbox),
     callout: { pos: 'right:40px;bottom:40px', h: 'Unread first.<br>Critical on top.', p: 'Gmail\'s own list, reordered in place. The contract that needs a signature beats the newsletter.' } },
-  labels: { rows: inbox, sorted: 1, bar: '<span class="gc-count">8 unread</span>', popup: { img: 'popup-set.png', y: 244 },
+  labels: { rows: inbox, sorted: 1, bar: barHtml(inbox), popup: { img: 'popup-set.png', y: 244 },
     callout: { pos: 'left:24px;bottom:32px', h: 'Your labels,<br>in plain words.', p: 'Name a label, describe what belongs in it. Jev answers one question per label, per email.' } },
-  dark: { rows: inbox, sorted: 1, dark: 1, bar: '<span class="gc-count">8 unread</span>',
+  dark: { rows: inbox, sorted: 1, dark: 1, bar: barHtml(inbox),
     callout: { pos: 'right:40px;bottom:40px', h: 'Light or dark,<br>it fits right in.', p: 'Chips and the status line follow the Gmail theme you already use.' } },
-  privacy: { rows: inbox, sorted: 0, bar: '<span class="gc-count">8 unread</span><span class="gc-error">Open Jev Inbox to finish setup.</span>', popup: { img: 'popup-firstrun.png', y: 0 },
+  privacy: { rows: inbox, sorted: 0, bar: '<span class="gc-live"><span class="gc-count">8 unread</span><span class="gc-error">Open Jev Inbox to finish setup.</span></span><button type="button" class="gc-setup">Finish setup</button>', popup: { img: 'popup-firstrun.png', y: 0 },
     callout: { pos: 'left:24px;bottom:32px', h: 'Nothing is sent<br>until you say so.', p: 'Only sender, subject, snippet and date of unread rows, and of read mail if you turn it on. The snippet is the first part of the body; the rest and attachments are never sent.' } },
-  search: { rows: search, sorted: 1, search: 1, bar: '<span class="gc-count">4 unread</span>', popup: { img: 'popup-set.png', y: 0 },
+  search: { rows: search, sorted: 1, search: 1, bar: barHtml(search), popup: { img: 'popup-key.png', y: 0 },
     callout: { pos: 'left:24px;bottom:32px', h: 'Your key,<br>your provider.', p: 'Vercel AI Gateway or TypeSafe. Works on the inbox, its tabs and search results.' } },
 };
 const s = S[scene];
@@ -253,6 +273,8 @@ document.getElementById('app').innerHTML = `
 ${s.popup ? `<div class="popup"><img src="${RAW}${s.popup.img}" style="margin-top:-${s.popup.y}px"></div>` : ''}
 ${P.get('nocallout') ? '' : `<div class="callout" style="${s.callout.pos}"><div class="brand"><img src="${ICON}">Jev Inbox</div><h1>${s.callout.h}</h1><p>${s.callout.p}</p></div>`}
 `;
+// content.ts sets data-gc-theme on the bar and on every chip slot from Gmail's own theme.
+for (const el of document.querySelectorAll('.gc-root, .gc-chips')) el.dataset.gcTheme = s.dark ? 'dark' : 'light';
 const callout = document.querySelector('.callout');
 const place = () => {
   if (!callout) return;

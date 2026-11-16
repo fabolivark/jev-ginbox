@@ -83,7 +83,7 @@ async function watchLeaks(page) {
     window.gcLeaks = [];
     const record = (where) => (event) => {
       const target = event.target;
-      if (target instanceof Element && target.closest('[data-gc-filter], [data-gc-clear]') !== null) {
+      if (target instanceof Element && target.closest('[data-gc-filter], [data-gc-clear], [data-gc-setup]') !== null) {
         window.gcLeaks.push(`${where}:${event.type}`);
       }
     };
@@ -333,6 +333,7 @@ async function themeReport(page) {
       '#gc-unread .gc-filter',
       '#gc-unread .gc-filter-count',
       '#gc-unread .gc-clear',
+      '#gc-unread .gc-setup',
       '#gc-unread .gc-filter-note',
       '.gc-chips .gc-chip',
       '.gc-chips .gc-badge',
@@ -544,9 +545,8 @@ async function checkPopupStates(popup, worker, extensionId) {
   await popup.locator('#testBtn').click();
   await popup.waitForFunction(() => document.getElementById('testBtn')?.textContent === 'Test connection');
   const testText = await popup.locator('#testResult').innerText();
-  // A popup opened as a tab is refused `test` by the worker, so this shows the refused outcome;
-  // the provider status mapping is covered by tests/errors.test.ts and by checkBarError below.
-  assert.equal(testText, 'Connection test failed.', 'the popup shows a refused test as plain text');
+  // The popup opened as a tab is an extension page, so the worker runs the test; the e2e provider answers 400.
+  assert.equal(testText, 'The provider refused the request (status 400).', 'the popup maps a provider failure to plain text');
   const testContrast = await contrastOf(popup, '#testResult');
 
   const card = await makeInvalidLabel(popup);
@@ -623,6 +623,124 @@ async function checkPopupStates(popup, worker, extensionId) {
   return { headings, testText, contrast };
 }
 
+async function badgeOf(worker) {
+  return worker.evaluate(async () => ({
+    text: await chrome.action.getBadgeText({}),
+    title: await chrome.action.getTitle({}),
+  }));
+}
+
+async function waitForBadge(worker, text) {
+  const deadline = Date.now() + 10000;
+  let badge = await badgeOf(worker);
+  while (badge.text !== text) {
+    if (Date.now() > deadline) throw new Error(`timed out: badge is ${JSON.stringify(badge)}, wanted "${text}"`);
+    await new Promise((done) => setTimeout(done, 100));
+    badge = await badgeOf(worker);
+  }
+  return badge;
+}
+
+async function waitForTab(context, url, before = []) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const tab = context.pages().find((candidate) => candidate.url() === url && !before.includes(candidate));
+    if (tab !== undefined) return tab;
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  throw new Error(`timed out: no tab at ${url}`);
+}
+
+async function shootPopup(page, url, state) {
+  for (const theme of THEMES) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(url);
+      await page.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.screenshot({ path: join(outDir, `popup-${state}-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  await page.emulateMedia({ colorScheme: null });
+}
+
+async function checkSetupTab(context, worker, setupUrl) {
+  const tab = await waitForTab(context, setupUrl);
+  const installBadge = await badgeOf(worker);
+  assert.deepEqual(installBadge, { text: '!', title: 'Jev Inbox: finish setup' }, 'a fresh install badges the action');
+  await tab.waitForFunction(() => document.getElementById('version')?.textContent !== '');
+  const testFromSetup = await tab.evaluate(() => chrome.runtime.sendMessage({ type: 'test' }));
+  assert.equal(testFromSetup.error, 'needs_ack', 'test from the setup tab reaches the worker');
+  assert.equal(await tab.title(), 'Jev Inbox setup', 'the setup tab has its own title');
+  assert.equal(await tab.locator('.welcome h1').innerText(), 'Welcome to Jev Inbox', 'the setup tab welcomes');
+  assert.equal(await tab.locator('#privacyNotice').isVisible(), true, 'the setup tab starts on the notice');
+  const layout = {};
+  for (const width of [1440, 320]) {
+    await tab.setViewportSize({ width, height: 900 });
+    layout[width] = await tab.evaluate(() => {
+      const box = document.body.getBoundingClientRect();
+      return { left: Math.round(box.left), width: Math.round(box.width), overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    assert.equal(layout[width].overflow, false, `the setup tab does not scroll sideways at ${width}`);
+  }
+  assert.deepEqual(layout[1440], { left: 530, width: 380, overflow: false }, 'the setup column is centred at 1440');
+  assert.deepEqual(layout[320], { left: 0, width: 320, overflow: false }, 'the setup column fills 320');
+  await shootPopup(tab, setupUrl, 'setup');
+  await tab.close();
+  return { url: setupUrl, installBadge, testFromSetup: testFromSetup.error, layout };
+}
+
+async function checkFinishSetup(context, page, worker, rows, version, setupUrl, providerCalls) {
+  const target = rows[rows.length - 1];
+  const entry = `crit:${target.threadId}|${target.lastMessageId}|${version}`;
+  const saved = await worker.evaluate((key) => chrome.storage.local.get([key, 'apiKey']), entry);
+  const before = providerCalls.length;
+  await worker.evaluate((key) => chrome.storage.local.remove([key, 'apiKey']), entry);
+  const badge = await waitForBadge(worker, '!');
+  const button = page.locator('#gc-unread [data-gc-setup]');
+  await button.waitFor({ timeout: 10000 });
+  assert.equal(await button.evaluate((el) => el.tagName), 'BUTTON', 'Finish setup is a button');
+  assert.equal(await button.innerText(), 'Finish setup', 'the halted bar offers Finish setup');
+  await watchLeaks(page);
+  const open = context.pages();
+  await button.focus();
+  await page.keyboard.press('Enter');
+  const opened = await waitForTab(context, setupUrl, open);
+  assert.deepEqual(await leaks(page), [], 'Finish setup never reaches Gmail');
+  await opened.close();
+
+  const themes = {};
+  for (const theme of THEMES) {
+    const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
+    await page.emulateMedia({ colorScheme: theme === 'dark' ? 'light' : 'dark' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(url);
+    await page.locator('#gc-unread [data-gc-setup]').waitFor({ timeout: 15000 });
+    await page.waitForFunction((expected) => document.getElementById('gc-unread')?.dataset.gcTheme === expected, theme);
+    const report = await themeReport(page);
+    assert.equal(report.bar, theme, `the halted bar follows Gmail's ${theme} theme`);
+    assert.deepEqual(report.failing, [], `the halted bar reaches AA in ${theme}`);
+    const setup = await page.evaluate(() => {
+      const el = document.querySelector('#gc-unread .gc-setup');
+      return { color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopColor };
+    });
+    themes[theme] = { checked: report.checked, setup };
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await page.screenshot({ path: join(outDir, `gmail-setup-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  await page.emulateMedia({ colorScheme: null });
+  assert.equal(providerCalls.length, before, 'a missing key sends nothing to the provider');
+  await worker.evaluate((items) => chrome.storage.local.set(items), saved);
+  const done = await waitForBadge(worker, '');
+  assert.equal(done.title, 'Jev Inbox', 'the badge clears once a key is back');
+  await page.locator('#gc-unread [data-gc-setup]').waitFor({ state: 'detached', timeout: 10000 });
+  return { badge, themes };
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -652,6 +770,8 @@ try {
   let [worker] = context.serviceWorkers();
   if (worker === undefined) worker = await context.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
+  const setupUrl = `chrome-extension://${extensionId}/popup.html?setup=1`;
+  const setupTab = await checkSetupTab(context, worker, setupUrl);
 
   const rows = unreadRows(html);
   assert.ok(rows.length > 0, 'fixture has unread rows');
@@ -692,6 +812,8 @@ try {
     };
   });
   await worker.evaluate((items) => chrome.storage.local.set(items), seed);
+  const readyBadge = await waitForBadge(worker, '');
+  assert.equal(readyBadge.title, 'Jev Inbox', 'the badge clears once the notice is accepted and a key is saved');
 
   const page = await context.newPage();
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -736,6 +858,7 @@ try {
   const theme = await shootFilteredGmail(page);
   assert.deepEqual(providerCalls, [], 'no provider call while filtering');
   const readDispatch = await checkReadDispatch(page, worker, read, version, providerCalls);
+  const finishSetup = await checkFinishSetup(context, page, worker, rows, version, setupUrl, providerCalls);
   const halted = await checkHalted(page, worker, rows, version, providerCalls);
 
   const popup = await context.newPage();
@@ -789,18 +912,7 @@ try {
     icons.push({ size: size_, box: `${boxWidth}x${boxHeight}+${icon.left}+${icon.top}` });
   }
 
-  async function shootPopup(state) {
-    for (const theme of THEMES) {
-      await popup.emulateMedia({ colorScheme: theme });
-      for (const width of WIDTHS) {
-        await popup.setViewportSize({ width, height: 900 });
-        await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-        await popup.waitForFunction(() => document.getElementById('version')?.textContent !== '');
-        await popup.waitForFunction(() => document.getAnimations().length === 0);
-        await popup.screenshot({ path: join(outDir, `popup-${state}-${theme}-${width}.png`), fullPage: true });
-      }
-    }
-  }
+  const popupUrl = `chrome-extension://${extensionId}/popup.html`;
 
   const statusText = () => popup.locator('#statusLine').innerText();
   const statusIs = (text) =>
@@ -809,7 +921,7 @@ try {
     });
 
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: false }));
-  await shootPopup('notice');
+  await shootPopup(popup, popupUrl, 'notice');
   assert.equal(await statusText(), 'Accept the notice below to start', 'status asks for the notice first');
   assert.equal(await popup.locator('#testBtn').isDisabled(), true, 'Test is disabled before the notice');
   const notice = await popup.locator('#privacyNotice').innerText();
@@ -818,13 +930,27 @@ try {
   assert.match(notice, /first part of the (email )?body/i, 'notice says the snippet is body text');
   assert.match(notice, /forwards/i, 'notice says the Gateway forwards to TypeSafe');
   assert.match(notice, /read emails/i, 'notice says read emails are sent when the toggle is on');
+  const bullets = await popup.locator('#privacyNotice li').allInnerTexts();
+  assert.equal(bullets.length, 3, 'the notice is three bullets');
+  const disclosures = {
+    fields: /sender, subject, snippet and date of unread emails/,
+    snippet: /snippet is the first part of the email body; the rest is never sent/,
+    gateway: /Vercel AI Gateway key, Vercel forwards each request to TypeSafe/,
+    typesafe: /TypeSafe key, it goes to TypeSafe only/,
+    labels: /Label names and descriptions are sent too, so keep sensitive information out of them/,
+    read: /"Also classify read mail" sends the same fields of read emails/,
+    cache: /Results are cached in this browser/,
+  };
+  for (const [name, pattern] of Object.entries(disclosures)) {
+    assert.match(bullets.join(' ').replace(/\s+/g, ' '), pattern, `the notice discloses ${name}`);
+  }
   const repoLinks = await popup.locator('a[href*="github.com"]').evaluateAll((links) => links.map((a) => a.href));
   assert.equal(repoLinks.length, 3, 'popup links the repository and the privacy policy');
   for (const href of repoLinks) {
     assert.ok(href.startsWith('https://github.com/fabolivark/jev-ginbox'), `popup link points to the fork: ${href}`);
   }
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
-  await shootPopup('rejected');
+  await shootPopup(popup, popupUrl, 'rejected');
   assert.equal(await statusText(), 'The key was rejected. Replace it below.', 'status says the key was rejected');
   await popup.locator('#apiKeyReplace').click();
   await popup.locator('#apiKey').fill('e2e-placeholder-key');
@@ -840,7 +966,7 @@ try {
   await worker.evaluate(() => chrome.storage.local.remove('authFailed'));
   await statusIs('Ready. Open Gmail to use it.');
   await setClassifyRead(worker, true);
-  await shootPopup('ready');
+  await shootPopup(popup, popupUrl, 'ready');
   assert.equal(await statusText(), 'Ready. Open Gmail to use it.', 'status says the active tab is not Gmail');
   assert.equal(await popup.locator('#testBtn').isDisabled(), false, 'Test is enabled with a saved key');
   assert.equal(await popup.locator('#classifyRead').isChecked(), true, 'popup shows the stored read toggle');
@@ -868,7 +994,7 @@ try {
     for (const width of WIDTHS) {
       await popup.setViewportSize({ width, height: 900 });
       await page.bringToFront();
-      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+      await popup.goto(popupUrl);
       await statusIs('Active on this Gmail tab');
       await popup.bringToFront();
       await popup.waitForFunction(() => document.getAnimations().length === 0);
@@ -878,7 +1004,7 @@ try {
   await page.close();
 
   await worker.evaluate(() => chrome.storage.local.remove(['apiKey', 'apiKeyHint']));
-  await shootPopup('nokey');
+  await shootPopup(popup, popupUrl, 'nokey');
   assert.equal(await statusText(), 'Add a key to start', 'status asks for a key');
   assert.equal(await popup.locator('#testBtn').isDisabled(), true, 'Test is disabled with no key');
   assert.equal(await popup.locator('#testHint').innerText(), 'Paste a key above to test it.', 'the hint asks for a key');
@@ -899,12 +1025,29 @@ try {
     'Test saves the typed key before the test message arrives'
   );
   await worker.evaluate(() => chrome.storage.local.set({ enabled: false }));
-  await shootPopup('paused');
-  assert.equal(await statusText(), 'Paused', 'status says paused first');
+  await shootPopup(popup, popupUrl, 'paused');
+  const dimming = () =>
+    popup.evaluate(() => ({
+      status: document.getElementById('statusLine').textContent,
+      header: Number(getComputedStyle(document.querySelector('.header')).opacity),
+      sections: [...document.querySelectorAll('.section, .footer')].map((el) => Number(getComputedStyle(el).opacity)),
+    }));
+  const paused = await dimming();
+  assert.equal(paused.status, 'Paused', 'the paused popup says so');
+  assert.equal(paused.header, 1, 'the header stays at full strength when paused');
+  assert.ok(paused.sections.length >= 5 && paused.sections.every((value) => value === 0.5), 'paused dims every section');
+  await popup.locator('#enabled').click();
+  const resumed = await dimming();
+  assert.ok(resumed.sections.every((value) => value === 1), 'switching on undims the sections at once');
+  await popup.locator('#enabled').click();
+  assert.ok((await dimming()).sections.every((value) => value === 0.5), 'switching off dims them again');
+  await popup.locator('label[for="viewSearch"]').click();
+  assert.equal(await popup.locator('#viewSearch').isChecked(), true, 'dimmed settings stay usable');
+  await worker.evaluate(() => chrome.storage.local.set({ enabled: true, viewSearch: false }));
 
   console.log(
     JSON.stringify(
-      { badges, chips, icons, filtered, readFiltered, readDispatch, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, outDir },
+      { setupTab, readyBadge, badges, chips, icons, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
       null,
       2
     )

@@ -111,9 +111,10 @@ const EVENT_TYPES = ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick',
 async function watchLeaks(page) {
   await page.evaluate((types) => {
     window.gcLeaks = [];
+    const CONTROLS = '[data-gc-filter], [data-gc-clear], [data-gc-setup], [data-gc-select], [data-gc-unselect]';
     const record = (where) => (event) => {
       const target = event.target;
-      if (target instanceof Element && target.closest('[data-gc-filter], [data-gc-clear], [data-gc-setup]') !== null) {
+      if (target instanceof Element && target.closest(CONTROLS) !== null) {
         window.gcLeaks.push(`${where}:${event.type}`);
       }
     };
@@ -365,6 +366,8 @@ async function themeReport(page) {
       '#gc-unread .gc-clear',
       '#gc-unread .gc-setup',
       '#gc-unread .gc-filter-note',
+      '#gc-unread .gc-select-option',
+      '#gc-unread .gc-selected',
       '.gc-chips .gc-chip',
       '.gc-chips .gc-badge',
     ].join(', ');
@@ -453,6 +456,7 @@ async function checkHalted(page, worker, rows, version, providerCalls) {
     await settle(page);
     assert.equal(await page.locator('.Cp tr.zA', { hasText: 'retrying' }).count(), 0, `no halted row says retrying in ${theme}`);
     assert.equal(await page.locator('.Cp tr.zA .gc-dot').count(), 0, `no halted row shows a loading dot in ${theme}`);
+    assert.equal(await page.locator('#gc-unread [data-gc-select]').count(), 0, `no Select button while every row is unclassified in ${theme}`);
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await settle(page);
@@ -886,6 +890,134 @@ async function checkFinishSetup(context, page, worker, rows, version, setupUrl, 
   return { badge, themes };
 }
 
+async function checkedThreads(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('.Cp tr.zA')]
+      .filter((row) => row.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true')
+      .map((row) => row.querySelector('[data-thread-id]')?.getAttribute('data-thread-id'))
+      .sort()
+  );
+}
+
+async function toggleCounts(page) {
+  return page.evaluate(() => {
+    const out = {};
+    for (const row of document.querySelectorAll('.Cp tr.zA')) {
+      const toggles = Number(row.querySelector('[role="checkbox"]')?.dataset.toggles ?? '0');
+      if (toggles > 0) out[row.querySelector('[data-thread-id]')?.getAttribute('data-thread-id')] = toggles;
+    }
+    return out;
+  });
+}
+
+async function selectedLine(page) {
+  return (await page.locator('#gc-unread .gc-selected').innerText()).trim();
+}
+
+// The fixture checkbox toggles on click, or on mouseup after a mousedown with
+// ?checkbox=mouseup; the extension must tick each row exactly once under both.
+async function checkSelect(page, worker, rows, mode) {
+  await setClassifyRead(worker, false);
+  const url = mode === 'mouseup' ? GMAIL_URL.replace('#', '?checkbox=mouseup#') : GMAIL_URL;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(url);
+  const selectMoney = page.locator('#gc-unread [data-gc-select="label:money"]');
+  await selectMoney.waitFor({ timeout: 15000 });
+  await settle(page);
+  await watchLeaks(page);
+  const critical = rows[0].threadId;
+  const money = [rows[1].threadId, rows[2].threadId];
+  assert.equal(await selectMoney.evaluate((el) => el.tagName), 'BUTTON', 'Select Money is a button');
+  assert.equal(
+    await selectMoney.getAttribute('aria-label'),
+    'Select the 2 loaded rows with Money in Gmail',
+    'Select Money names its action and count'
+  );
+
+  await page.locator(`${rowSelector(critical)} [role="checkbox"]`).click();
+  await page.locator('#gc-unread .gc-selected', { hasText: '1 selected' }).waitFor({ timeout: 5000 });
+  await selectMoney.click();
+  await settle(page);
+  const expected = [critical, ...money].sort();
+  assert.deepEqual(await checkedThreads(page), expected, `${mode}: Select Money ticks the Money rows and keeps the hand-ticked one`);
+  const toggles = await toggleCounts(page);
+  assert.deepEqual(Object.keys(toggles).sort(), expected, `${mode}: no other row is touched`);
+  assert.ok(Object.values(toggles).every((count) => count === 1), `${mode}: every row toggles exactly once`);
+  assert.equal(await selectedLine(page), '3 selected', `${mode}: the bar counts Gmail's ticked rows`);
+  await selectMoney.click();
+  await settle(page);
+  assert.deepEqual(await toggleCounts(page), toggles, `${mode}: selecting again never unticks a row`);
+
+  await page.locator('#gc-unread [data-gc-unselect]').focus();
+  await page.keyboard.press('Enter');
+  await settle(page);
+  assert.deepEqual(await checkedThreads(page), [], `${mode}: Enter on Clear selection unticks every row`);
+  assert.equal(await page.locator('#gc-unread [data-gc-unselect]').count(), 0, 'Clear selection leaves with the selection');
+  assert.equal(await selectedLine(page), '', 'no selection count without a selection');
+  assert.ok(
+    await page.evaluate(() => document.activeElement?.hasAttribute('data-gc-select') === true),
+    'focus moves to a Select button'
+  );
+
+  await page.locator('#gc-unread [data-gc-filter="label:home"]').click();
+  await settle(page);
+  assert.equal(
+    await selectMoney.getAttribute('aria-label'),
+    'Select the 1 loaded row with Money in Gmail',
+    'Select counts only the rows the filter shows'
+  );
+  await selectMoney.focus();
+  await page.keyboard.press('Space');
+  await settle(page);
+  assert.deepEqual(await checkedThreads(page), [rows[1].threadId], `${mode}: a row the filter hides is never ticked`);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute('data-gc-select')),
+    'label:money',
+    'focus stays on the Select button'
+  );
+  await page.locator('#gc-unread [data-gc-clear]').click();
+  await page.locator('#gc-unread [data-gc-unselect]').click();
+  await settle(page);
+  assert.deepEqual(await checkedThreads(page), [], 'Clear selection by pointer unticks the row');
+  assert.deepEqual(await leaks(page), [], `${mode}: no Select control event reaches Gmail`);
+  return { mode, selected: expected.length, toggledOnce: true };
+}
+
+async function shootSelectedGmail(page) {
+  const themes = {};
+  for (const theme of THEMES) {
+    const url = theme === 'dark' ? GMAIL_URL.replace('#', '?theme=dark#') : GMAIL_URL;
+    await page.emulateMedia({ colorScheme: theme === 'dark' ? 'light' : 'dark' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(url);
+    await page.locator('#gc-unread [data-gc-select="label:money"]').waitFor({ timeout: 15000 });
+    await page.locator('#gc-unread [data-gc-select="label:money"]').click();
+    await page.locator('#gc-unread .gc-selected', { hasText: '2 selected' }).waitFor({ timeout: 5000 });
+    await settle(page);
+    const report = await themeReport(page);
+    assert.equal(report.bar, theme, `bar follows Gmail's ${theme} theme with a selection`);
+    assert.deepEqual(report.failing, [], `every bar text reaches AA with a selection in ${theme}`);
+    const measured = await page.locator('#gc-unread .gc-select-option, #gc-unread .gc-selected').count();
+    assert.ok(measured >= 4, `measured the Select buttons and the count in ${theme}`);
+    themes[theme] = { checked: report.checked };
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await page.screenshot({ path: join(outDir, `gmail-select-${theme}-${width}.png`), fullPage: true });
+      const outside = await page.evaluate(() =>
+        [...document.querySelectorAll('#gc-unread, #gc-unread *')]
+          .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
+          .map((el) => `${el.className} ${Math.round(el.getBoundingClientRect().right)}`)
+      );
+      assert.deepEqual(outside, [], `the bar fits ${width}px in ${theme}`);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(overflow <= 0, `the list fits ${width}px in ${theme} with no horizontal scroll`);
+    }
+  }
+  await page.emulateMedia({ colorScheme: null });
+  return themes;
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -1002,7 +1134,12 @@ try {
   const filtered = await checkFilter(page, worker, rows, tbodyHtml(html), version);
   const readFiltered = await checkReadRows(page, worker, rows, read);
   const theme = await shootFilteredGmail(page, rows[0].threadId);
-  assert.deepEqual(providerCalls, [], 'no provider call while filtering');
+  const selected = [
+    await checkSelect(page, worker, rows, 'click'),
+    await checkSelect(page, worker, rows, 'mouseup'),
+  ];
+  const selectedThemes = await shootSelectedGmail(page);
+  assert.deepEqual(providerCalls, [], 'no provider call while filtering or selecting');
   const readDispatch = await checkReadDispatch(page, worker, read, version, providerCalls);
   const finishSetup = await checkFinishSetup(context, page, worker, rows, version, setupUrl, providerCalls);
   const halted = await checkHalted(page, worker, rows, version, providerCalls);
@@ -1211,7 +1348,7 @@ try {
 
   console.log(
     JSON.stringify(
-      { setupTab, readyBadge, badges, chips, icons, manage, popupAxe, labelsEditor, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
+      { setupTab, readyBadge, badges, chips, icons, manage, popupAxe, labelsEditor, filtered, readFiltered, selected, selectedThemes, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
       null,
       2
     )

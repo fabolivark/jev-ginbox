@@ -7,6 +7,33 @@
       if (new URLSearchParams(location.search).get('theme') === 'dark') {
         document.documentElement.classList.add('dark');
       }
+      // Gmail-like row checkbox: aria-checked on the box, x7 on the row. It toggles on
+      // click, or on mouseup after a mousedown with ?checkbox=mouseup, and counts its
+      // toggles in data-toggles so a test can catch a double toggle.
+      (() => {
+        const onMouseUp = new URLSearchParams(location.search).get('checkbox') === 'mouseup';
+        let pressed = null;
+        const boxOf = (event) =>
+          event.target instanceof Element ? event.target.closest('[role="checkbox"]') : null;
+        const toggle = (box) => {
+          const checked = box.getAttribute('aria-checked') !== 'true';
+          box.setAttribute('aria-checked', String(checked));
+          box.dataset.toggles = String(Number(box.dataset.toggles ?? '0') + 1);
+          box.closest('tr')?.classList.toggle('x7', checked);
+        };
+        document.addEventListener('mousedown', (event) => {
+          pressed = event.button === 0 ? boxOf(event) : null;
+        });
+        document.addEventListener('mouseup', (event) => {
+          const box = boxOf(event);
+          if (onMouseUp && box !== null && box === pressed) toggle(box);
+          pressed = null;
+        });
+        document.addEventListener('click', (event) => {
+          const box = boxOf(event);
+          if (box !== null && !onMouseUp) toggle(box);
+        });
+      })();
     </script>
     <link rel="stylesheet" href="../dist/section.css" />
     <style>
@@ -16,6 +43,7 @@
         --page-muted: #5f6368;
         --page-line: #e8eaed;
         --page-hover: #f6f8fc;
+        --page-selected: #c2dbff;
       }
       :root.dark {
         --page-bg: #202124;
@@ -23,6 +51,7 @@
         --page-muted: #9aa0a6;
         --page-line: #3c4043;
         --page-hover: #2a2b2e;
+        --page-selected: #394457;
       }
       html,
       body {
@@ -65,6 +94,26 @@
         padding: 10px 16px;
         vertical-align: top;
       }
+      td.oZ-x3 {
+        width: 20px;
+        padding-right: 0;
+      }
+      td.oZ-x3 [role="checkbox"] {
+        width: 14px;
+        height: 14px;
+        margin-top: 1px;
+        border: 2px solid var(--page-muted);
+        border-radius: 2px;
+        box-sizing: border-box;
+      }
+      td.oZ-x3 [role="checkbox"][aria-checked="true"] {
+        border-color: var(--page-text);
+        background: var(--page-text);
+        box-shadow: inset 0 0 0 2px var(--page-bg);
+      }
+      tr.zA.x7 {
+        background: var(--page-selected);
+      }
       td.xY {
         width: 200px;
         white-space: nowrap;
@@ -79,6 +128,28 @@
       }
       tr.zA.zE {
         font-weight: 700;
+      }
+      @media (max-width: 480px) {
+        table {
+          table-layout: fixed;
+        }
+        td {
+          padding: 10px 6px;
+        }
+        td.oZ-x3 {
+          padding-left: 12px;
+        }
+        td.xY {
+          width: 88px;
+        }
+        td.xW {
+          width: 40px;
+        }
+      }
+      @media (max-width: 360px) {
+        td.xY {
+          width: 56px;
+        }
       }
       .y2 {
         display: block;
@@ -101,6 +172,7 @@
         <table>
           <tbody>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="hello@plotline.example" name="Plotline Newsletter"
                   >Plotline Newsletter</span
@@ -123,6 +195,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 08:05">08:05</span></td>
             </tr>
             <tr class="zA yO">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="yP" email="orders@greenhouse.example" name="Greenhouse Shop"
                   >Greenhouse Shop</span
@@ -144,6 +217,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 08:40">08:40</span></td>
             </tr>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="appointments@passport.example" name="Passport Office"
                   >Passport Office</span
@@ -166,6 +240,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 09:02">09:02</span></td>
             </tr>
             <tr class="zA yO">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="yP" email="digest@weather.example" name="Weather Digest"
                   >Weather Digest</span
@@ -187,6 +262,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 09:20">09:20</span></td>
             </tr>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="statements@meadowbank.example" name="Meadow Bank"
                   >Meadow Bank</span
@@ -209,6 +285,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 09:48">09:48</span></td>
             </tr>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="loans@citylibrary.example" name="City Library"
                   >City Library</span
@@ -231,6 +308,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 10:10">10:10</span></td>
             </tr>
             <tr class="zA yO">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="yP" email="receipts@rides.example" name="Ride Sharing"
                   >Ride Sharing</span
@@ -252,6 +330,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 10:35">10:35</span></td>
             </tr>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="migration@office.example" name="Migration Office"
                   >Migration Office</span
@@ -274,6 +353,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 11:02">11:02</span></td>
             </tr>
             <tr class="zA zE">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="zF" email="rent@willowproperty.example" name="Willow Property"
                   >Willow Property</span
@@ -296,6 +376,7 @@
               <td class="xW"><span title="Mon, Sep 22 2026, 11:30">11:30</span></td>
             </tr>
             <tr class="zA yO">
+              <td class="oZ-x3"><div class="oZ-jc T-Jo J-J5-Ji" role="checkbox" aria-checked="false" aria-label="Select this conversation"></div></td>
               <td class="xY">
                 <span class="yP" email="billing@power.example" name="Power Company"
                   >Power Company</span

@@ -1,6 +1,6 @@
 # Jev Inbox for Gmail
 
-Jev Inbox is a Chrome extension that reorders the message list Gmail already renders, on screen only: unread mail moves to the top, the messages that matter most sit above the rest, and every classified row carries chips for your own labels. A thin bar above the list shows the unread count, in-flight progress, and errors. You choose the views it touches (inbox, other inbox tabs, search results, labels and other folders), the provider it classifies through, your labels, and how confident a classification has to be before a row counts as critical. Nothing moves in Gmail's own DOM, so a click, a checkbox, a star, and a hover action always land on the row you see.
+Jev Inbox is a Chrome extension that reorders the message list Gmail already renders, on screen only: unread mail moves to the top, the messages that matter most sit above the rest, and every classified row carries chips for your own labels. A thin bar above the list shows the unread count, in-flight progress, and errors, and lets you filter the list or tick every row of one label in Gmail's own checkboxes. You choose the views it touches (inbox, other inbox tabs, search results, labels and other folders), the provider it classifies through, your labels, and how confident a classification has to be before a row counts as critical. Nothing moves in Gmail's own DOM, so a click, a checkbox, a star, and a hover action always land on the row you see.
 
 ![Chrome window with the Gmail inbox reordered: unread mail first, critical rows on top with their label chips](docs/store/01-unread-first.png)
 
@@ -60,6 +60,12 @@ Every chip is a button. Click a label chip or the Critical badge on a row, or th
 
 The filter covers only the rows Gmail has loaded in the list you are looking at, usually one page of 50, not the whole mailbox. To find every message with a label across the mailbox, use Gmail's own search. Only classified rows can match, because only they carry chips. By default only unread rows are classified, so a message you open and return from drops out of the filtered view once Gmail marks it read; turn on "Also classify read mail" in the popup and the read rows of the loaded list are classified and filtered too, and a message stays in the filter after you read it. The filter hides rows on screen only: hidden rows keep their place in Gmail's list, so the list keeps its height with a blank space below the matches, and Gmail's own select-all and keyboard shortcuts still act on the hidden rows. It stays on while Gmail re-renders the list or opens Compose, and clears when you move to another list, edit the labels, switch providers, or turn the extension or that view off. Clicking a chip never opens, marks, or labels the message.
 
+## Selecting a label's rows
+
+The bar's "Select in Gmail" group has one button per label present in the list, plus Critical, each with the number of rows that carry it. Click one and the extension ticks Gmail's own checkbox on every loaded row with that chip, so Gmail's toolbar (Delete, Archive, Mark as read, Move to) then acts on exactly those rows. The extension never deletes, archives, or moves mail itself; Gmail does, when you press its button.
+
+Only classified rows that show the chip are ticked: unclassified rows, rows still loading or retrying, and rows the active filter hides when you press the button are left alone, and rows you already ticked stay ticked, so you can add a second label to the same selection. A row ticked earlier stays ticked when a filter later hides it, Gmail's toolbar still acts on it, and the selected count includes it. The bar shows how many rows are selected in Gmail and a Clear selection button that unticks them all. Like the filter, it covers only the rows Gmail has loaded, not the whole mailbox. The buttons work from the keyboard with Tab, Enter and Space.
+
 ## Managing classified mail
 
 Gmail shows at most 100 conversations per page, and Jev Inbox classifies only the rows Gmail renders. Gmail's own search, though, finds every matching conversation. "Manage" in the popup opens a page that lists everything in the cache for your current labels and provider, grouped by top label and then by sender, with how many threads each sender has and their latest subject. Filter by label, urgency range, or text in the sender or subject, tick senders (or every sender in a label), and press "Open in Gmail". It opens a Gmail search such as `in:inbox from:(a@example.com OR b@example.com)`; untick "Only mail in the Inbox" to search all mail. In Gmail, tick the select-all box, click "Select all conversations that match this search", and delete or archive. The search matches every email from those senders, not only the classified ones, and Jev Inbox never deletes or moves mail itself.
@@ -101,7 +107,7 @@ The version lives in `package.json` and `manifest.json`, and the two must match.
 npm run watch      # rebuild on change
 npm run typecheck  # tsc --noEmit
 npm test           # unit tests
-npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, the icons and the halted states, screenshot the list and the popup states
+npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, the label selection, the icons and the halted states, screenshot the list and the popup states
 npm run icons      # render assets/icon.svg into the icon PNGs
 ```
 

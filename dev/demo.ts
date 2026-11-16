@@ -123,6 +123,7 @@ const opened = document.getElementById('demo-opened');
 
 document.addEventListener('click', (event) => {
   const target = event.target;
+  if (target instanceof Element && target.closest('[role="checkbox"]') !== null) return;
   const row = target instanceof Element ? target.closest('tr.zA') : null;
   if (!(row instanceof HTMLTableRowElement)) return;
   const tbody = row.parentElement;

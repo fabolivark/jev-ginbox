@@ -86,14 +86,15 @@ The version lives in `package.json` and `manifest.json`, and the two must match.
 npm run watch      # rebuild on change
 npm run typecheck  # tsc --noEmit
 npm test           # unit tests
-npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, screenshot the filtered list and the popup
+npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter and the icons, screenshot the filtered list and the popup
+npm run icons      # render assets/icon.svg into the icon PNGs
 ```
 
 `npm run build` writes `dist/`, which holds only the unpacked extension, and `dev-dist/`, which holds the demo and store stubs.
 
 `dev/demo.html` is a standalone Gmail-like list with made-up mail, a stubbed `chrome` API, and canned classifications, so nothing is sent anywhere. Build first, then open the file in Chrome. It accepts `?theme=dark` for the dark list and `?ack=0` to simulate a browser that has not accepted the first-run notice. Clicking a row resolves its thread the way Gmail does, by the row's index in the list, and reports it as `Opened: <subject>` in the demo line, so a wrong mapping shows up as a wrong subject.
 
-`assets/icon.svg` is the icon source. The PNGs next to it are rendered from it and copied into `dist/assets` by the build.
+`assets/icon.svg` is the icon source, the Orca logo. `npm run icons` renders it into the PNGs next to it, centred on a transparent square and never stretched, and into the preview sheet `docs/icons-preview.png`. The build copies them into `dist/assets`.
 
 ## License
 

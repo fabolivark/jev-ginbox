@@ -11,6 +11,7 @@
     "package": "node scripts/package.mjs",
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "icons": "node scripts/icons.mjs",
     "store-images": "npm run build && node scripts/store-images.mjs",
     "test": "node scripts/test.mjs",
     "e2e": "npm run build && node scripts/e2e.mjs"

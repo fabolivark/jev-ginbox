@@ -58,4 +58,4 @@ Rows classify again when the cache entry they would use is gone: "Clear cache" r
 
 ## Changes
 
-If what is sent or stored changes, this page changes with it, and the change is visible in the repository history.
+If what is sent or stored changes, this page changes with it, and the change is visible in the repository history at https://github.com/fabolivark/jev-ginbox.

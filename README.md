@@ -23,8 +23,8 @@ The Critical badge and the order are a model guess from text the sender wrote. A
 ## Install from source
 
 ```bash
-git clone https://github.com/iamomiid/jev-inbox.git
-cd jev-inbox
+git clone https://github.com/fabolivark/jev-ginbox.git
+cd jev-ginbox
 npm install
 npm run build
 ```
@@ -98,4 +98,4 @@ npm run icons      # render assets/icon.svg into the icon PNGs
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Based on [iamomiid/jev-inbox](https://github.com/iamomiid/jev-inbox) by Omid Sayfun.

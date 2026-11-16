@@ -2,6 +2,15 @@
 
 Draft text for the store listing. Nothing here is published.
 
+## Listing details
+
+- Category: Productivity > Communication, the category for email management (confirm in the Developer Dashboard dropdown when submitting)
+- Language: English
+- Homepage URL: https://github.com/fabolivark/jev-ginbox
+- Privacy policy URL: https://github.com/fabolivark/jev-ginbox/blob/main/PRIVACY.md
+- Support URL: none. Issues are disabled on the repository, so the support email below is the only contact.
+- Support email: TODO for the owner to fill in before submitting. Do not publish without a real, monitored address.
+
 ## Short description
 
 Unread Gmail first, critical at the top, with your own labels, classified by TypeSafe Jev.
@@ -27,22 +36,22 @@ Jev Inbox sorts and labels the unread messages Gmail already shows in the list c
 
 - `storage`: saves your settings (provider, API keys, enabled switch, sensitivity, view toggles, first-run acknowledgement), your labels, and the classification cache, all in `chrome.storage.local` in your own browser profile.
 - `https://mail.google.com/*`: reads the rendered message list to identify unread rows, and read rows when "Also classify read mail" is on, and their sender, subject, snippet and date, reorders those rows, and injects the status bar and label chips.
-- `https://ai-gateway.vercel.sh/*`: sends row metadata for classification when Vercel AI Gateway is the selected provider, using the user's own key.
-- `https://api.typesafe.ai/*`: sends row metadata for classification when TypeSafe is the selected provider, using the user's own key.
+- `https://ai-gateway.vercel.sh/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when Vercel AI Gateway is the selected provider, using the user's own key.
+- `https://api.typesafe.ai/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when TypeSafe is the selected provider, using the user's own key.
 
 No other hosts are requested. The extension makes no request to any server of its own.
 
 ## Data use disclosure answers
 
-- What data is collected: message metadata from the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows, and of read rows when "Also classify read mail" is on, plus the user's own label names and descriptions, which are sent as the criteria for the label questions. Not the body beyond the snippet Gmail shows, which is its first part, not attachments, not the user's contacts, not their browsing history.
+- What data is collected: fields of rows in the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows, and of read rows when "Also classify read mail" is on, plus the user's own label names and descriptions, which are sent as the criteria for the label questions. Not the body beyond the snippet Gmail shows, which is its first part, not attachments, not the user's contacts, not their browsing history.
 - How the data is used: sent to the AI provider the user selected (Vercel AI Gateway forwards it to TypeSafe, which runs Jev), to classify each row as critical or not, how urgent it is, and which of the user's labels it belongs to, where each label name and description is the criteria for that label's answer. Results are shown in the Gmail list.
 - Is data sold to third parties: no.
 - Is data used or transferred for purposes unrelated to the item's single purpose: no.
 - Is data used or transferred to determine creditworthiness or for lending purposes: no.
 - Transfer to third parties: only to the AI provider the user selected (Vercel AI Gateway or TypeSafe), under the user's own key and account, and only for classification.
 - Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header. The popup keeps only the last four characters of each key so it can show that a key is saved without reading it back.
-- Personal communications: message metadata of unread rows, and of read rows when the user turns that on, is sent to the selected provider for classification, together with the user's label names and descriptions as criteria. Message content is not read or sent.
-- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, and removing the extension deletes all of it.
+- Personal communications: the sender, subject, snippet and date of unread rows, and of read rows when the user turns that on, are sent to the selected provider for classification, together with the user's label names and descriptions as criteria. The snippet is the first part of the email body, so it can carry body text such as a verification code; the rest of the body and attachments are not read or sent.
+- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, with its read rows when "Also classify read mail" is on, and removing the extension deletes all of it.
 
 ## Images
 

@@ -64,8 +64,8 @@ const labels = [
   { id: 'home', name: 'Home', description: 'Rent, utilities, landlord and building notices' },
 ];
 
-if (!existsSync(join(root, 'dist', 'popup.js'))) {
-  console.error('dist/ is missing. Run npm run build first.');
+if (!existsSync(join(root, 'dist', 'popup.js')) || !existsSync(join(root, 'dev-dist', 'stub.js'))) {
+  console.error('dist/ or dev-dist/ is missing. Run npm run build first.');
   process.exit(1);
 }
 
@@ -73,13 +73,15 @@ mkdirSync(rawDir, { recursive: true });
 mkdirSync(outDir, { recursive: true });
 
 const popupHtml = readFileSync(join(root, 'dist', 'popup.html'), 'utf8');
-const storeHtmlPath = join(root, 'dist', 'popup-store.html');
+const storeHtmlPath = join(root, 'dev-dist', 'popup-store.html');
 writeFileSync(
   storeHtmlPath,
-  popupHtml.replace(
-    '<script src="popup.js"></script>',
-    '<script src="stub.js"></script>\n    <script src="popup.js"></script>'
-  )
+  popupHtml
+    .replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n    <base href="../dist/" />')
+    .replace(
+      '<script src="popup.js"></script>',
+      '<script src="../dev-dist/stub.js"></script>\n    <script src="popup.js"></script>'
+    )
 );
 
 function popupRender(name, state) {

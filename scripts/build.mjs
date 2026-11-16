@@ -3,26 +3,27 @@ import { cpSync, mkdirSync, rmSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 
-rmSync('dist', { recursive: true, force: true });
-mkdirSync('dist');
+for (const dir of ['dist', 'dev-dist']) {
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir);
+}
 
 const common = {
   bundle: true,
   sourcemap: false,
   target: ['chrome114'],
   logLevel: 'info',
-  outdir: 'dist',
   define: { 'process.env.NODE_ENV': '"production"' },
 };
 
-const entry = (entryPoints, format) => ({ entryPoints, format });
+const entry = (entryPoints, format, outdir) => ({ entryPoints, format, outdir });
 
 const runs = [
-  entry(['src/content.ts'], 'iife'),
-  entry(['src/background.ts'], 'esm'),
-  entry(['src/popup.ts'], 'iife'),
-  entry(['dev/demo.ts'], 'iife'),
-  entry(['dev/store/stub.ts'], 'iife'),
+  entry(['src/content.ts'], 'iife', 'dist'),
+  entry(['src/background.ts'], 'esm', 'dist'),
+  entry(['src/popup.ts'], 'iife', 'dist'),
+  entry(['dev/demo.ts'], 'iife', 'dev-dist'),
+  entry(['dev/store/stub.ts'], 'iife', 'dev-dist'),
 ];
 
 if (watch) {
@@ -38,4 +39,4 @@ if (watch) {
 cpSync('manifest.json', 'dist/manifest.json');
 cpSync('src/popup.html', 'dist/popup.html');
 cpSync('src/section.css', 'dist/section.css');
-cpSync('assets', 'dist/assets', { recursive: true });
+cpSync('assets', 'dist/assets', { recursive: true, filter: (src) => !src.endsWith('.svg') });

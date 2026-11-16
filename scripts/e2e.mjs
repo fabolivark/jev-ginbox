@@ -20,7 +20,7 @@ const LABELS = [
 function fixtureHtml() {
   return readFileSync(join(root, 'dev', 'demo.html'), 'utf8')
     .replace(/<link rel="stylesheet" href="..\/dist\/section.css" \/>/, '')
-    .replace(/<script src="..\/dist\/[a-z]+\.js"><\/script>/g, '');
+    .replace(/<script src="..\/(dev-)?dist\/[a-z]+\.js"><\/script>/g, '');
 }
 
 function unreadRows(html) {

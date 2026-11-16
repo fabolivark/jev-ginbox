@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 import {
+  DEFAULT_SETTINGS,
   cacheVersion,
   contentChanges,
   contentState,
@@ -27,6 +28,7 @@ const stored: Record<string, unknown> = {
   labels,
   viewInbox: true,
   viewSearch: false,
+  classifyRead: true,
   [`crit:t1|m1|${version}`]: { ...hit, ts: 1 },
   [`crit:t2|m2|gateway:old`]: hit,
   [`crit:t3|m3|${version}`]: { broken: true },
@@ -42,6 +44,7 @@ test('contentState returns the content settings and never a key or hint', () => 
     labels,
     viewInbox: true,
     viewSearch: false,
+    classifyRead: true,
   });
   const serialized = JSON.stringify(state);
   for (const secret of ['vck_secret_gateway', 'ts_secret', 'eway', 'cret']) {
@@ -69,6 +72,15 @@ test('contentChanges forwards settings and cache changes', () => {
       [`crit:t1|m1|${version}`]: { newValue: hit },
       [`crit:t2|m2|${version}`]: {},
     },
+  });
+});
+
+test('classifying read mail is off by default and reaches the content script', () => {
+  assert.equal(DEFAULT_SETTINGS.classifyRead, false);
+  assert.deepEqual(contentChanges({ classifyRead: { newValue: true, oldValue: false } }), {
+    type: 'changed',
+    keysChanged: false,
+    changes: { classifyRead: { newValue: true } },
   });
 });
 

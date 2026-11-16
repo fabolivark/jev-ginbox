@@ -1,6 +1,26 @@
+/* Gmail's theme is a Gmail setting, not the OS one: content.ts reads it from the
+   list background and sets data-gc-theme on the bar and on every chip slot. */
+.gc-root,
+.gc-chips {
+  --gc-text: #3c4043;
+  --gc-muted: #5f6368;
+  --gc-error: #c5221f;
+  --gc-line: #dadce0;
+  --gc-outline: #80868b;
+}
+
+.gc-root[data-gc-theme='dark'],
+.gc-chips[data-gc-theme='dark'] {
+  --gc-text: #e8eaed;
+  --gc-muted: #bdc1c6;
+  --gc-error: #f28b82;
+  --gc-line: #5f6368;
+  --gc-outline: #9aa0a6;
+}
+
 .gc-root {
   background: transparent;
-  color: inherit;
+  color: var(--gc-text);
   font-family: inherit;
   font-size: 12px;
   display: flex;
@@ -8,22 +28,22 @@
   align-items: baseline;
   flex-wrap: wrap;
   padding: 8px 0 6px;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-bottom: 1px solid var(--gc-line);
   margin: 0 0 4px;
   position: relative;
 }
 
 .gc-count {
-  color: color-mix(in srgb, currentColor 60%, transparent);
+  color: var(--gc-muted);
 }
 
 .gc-status {
-  color: color-mix(in srgb, currentColor 60%, transparent);
+  color: var(--gc-muted);
   font-style: italic;
 }
 
 .gc-error {
-  color: color-mix(in srgb, #d93025 70%, currentColor);
+  color: var(--gc-error);
 }
 
 .gc-chips {
@@ -35,7 +55,7 @@
 }
 
 .gc-pending {
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  color: var(--gc-muted);
   font-style: italic;
 }
 
@@ -46,7 +66,7 @@
   height: 2px;
   width: 30%;
   border-radius: 2px;
-  background: color-mix(in srgb, currentColor 55%, transparent);
+  background: var(--gc-muted);
   animation: gc-progress 1.1s ease-in-out infinite;
 }
 
@@ -64,7 +84,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: color-mix(in srgb, currentColor 55%, transparent);
+  background: var(--gc-muted);
   animation: gc-dot 1.2s ease-in-out infinite;
 }
 
@@ -85,51 +105,200 @@
   }
 }
 
-.gc-badge {
-  --gc-hue: #d93025;
-  background: color-mix(in srgb, var(--gc-hue) 22%, transparent);
-  color: color-mix(in srgb, var(--gc-hue) 70%, currentColor);
-  border: 1px solid color-mix(in srgb, var(--gc-hue) 45%, transparent);
-  border-radius: 3px;
-  padding: 0 4px;
-}
-
-.gc-chip {
-  background: color-mix(in srgb, var(--gc-hue) 22%, transparent);
-  color: color-mix(in srgb, var(--gc-hue) 70%, currentColor);
-  border: 1px solid color-mix(in srgb, var(--gc-hue) 45%, transparent);
-  border-radius: 3px;
-  padding: 0 4px;
-}
-
+/* Each hue: a tinted chip (fg on bg) and a pressed chip (on-solid on solid),
+   both at WCAG AA in both themes; tests/theme.test.ts checks every pair. */
 .gc-hue-0 {
-  --gc-hue: #1e8e3e;
+  --gc-hue-bg: #e6f4ea;
+  --gc-hue-fg: #0d652d;
+  --gc-hue-solid: #137333;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-1 {
-  --gc-hue: #1a73e8;
+  --gc-hue-bg: #e8f0fe;
+  --gc-hue-fg: #174ea6;
+  --gc-hue-solid: #1967d2;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-2 {
-  --gc-hue: #b06000;
+  --gc-hue-bg: #fef7e0;
+  --gc-hue-fg: #8a4b00;
+  --gc-hue-solid: #995200;
+  --gc-hue-on-solid: #ffffff;
 }
 
-.gc-hue-3 {
-  --gc-hue: #d93025;
+.gc-hue-3,
+.gc-badge,
+.gc-filter-critical {
+  --gc-hue-bg: #fce8e6;
+  --gc-hue-fg: #a50e0e;
+  --gc-hue-solid: #c5221f;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-4 {
-  --gc-hue: #7627bb;
+  --gc-hue-bg: #f3e8fd;
+  --gc-hue-fg: #681da8;
+  --gc-hue-solid: #8430ce;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-5 {
-  --gc-hue: #007b83;
+  --gc-hue-bg: #e4f7fb;
+  --gc-hue-fg: #00585e;
+  --gc-hue-solid: #007077;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-6 {
-  --gc-hue: #a8377b;
+  --gc-hue-bg: #fde7f3;
+  --gc-hue-fg: #8a1f5d;
+  --gc-hue-solid: #a8377b;
+  --gc-hue-on-solid: #ffffff;
 }
 
 .gc-hue-7 {
-  --gc-hue: #5f6368;
+  --gc-hue-bg: #f1f3f4;
+  --gc-hue-fg: #3c4043;
+  --gc-hue-solid: #5f6368;
+  --gc-hue-on-solid: #ffffff;
+}
+
+[data-gc-theme='dark'] .gc-hue-0 {
+  --gc-hue-bg: #1d3526;
+  --gc-hue-fg: #a8dab5;
+  --gc-hue-solid: #81c995;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-1 {
+  --gc-hue-bg: #1d2a42;
+  --gc-hue-fg: #aecbfa;
+  --gc-hue-solid: #8ab4f8;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-2 {
+  --gc-hue-bg: #3a2a14;
+  --gc-hue-fg: #fdc69c;
+  --gc-hue-solid: #fcad70;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-3,
+[data-gc-theme='dark'] .gc-badge,
+[data-gc-theme='dark'] .gc-filter-critical {
+  --gc-hue-bg: #42201e;
+  --gc-hue-fg: #f6aea9;
+  --gc-hue-solid: #f28b82;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-4 {
+  --gc-hue-bg: #33264a;
+  --gc-hue-fg: #e9d2fd;
+  --gc-hue-solid: #d7aefb;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-5 {
+  --gc-hue-bg: #14363b;
+  --gc-hue-fg: #a1e4f2;
+  --gc-hue-solid: #78d9ec;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-6 {
+  --gc-hue-bg: #3d1f33;
+  --gc-hue-fg: #fdcfe8;
+  --gc-hue-solid: #ff8bcb;
+  --gc-hue-on-solid: #202124;
+}
+
+[data-gc-theme='dark'] .gc-hue-7 {
+  --gc-hue-bg: #303134;
+  --gc-hue-fg: #dadce0;
+  --gc-hue-solid: #bdc1c6;
+  --gc-hue-on-solid: #202124;
+}
+
+.gc-badge,
+.gc-chip,
+.gc-filter {
+  background: var(--gc-hue-bg);
+  color: var(--gc-hue-fg);
+  border: 1px solid color-mix(in srgb, var(--gc-hue-fg) 35%, var(--gc-hue-bg));
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+button.gc-badge,
+button.gc-chip,
+.gc-filter,
+.gc-clear {
+  appearance: none;
+  font: inherit;
+  line-height: inherit;
+  margin: 0;
+  cursor: pointer;
+}
+
+.gc-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.gc-filters-label,
+.gc-filter-note {
+  color: var(--gc-muted);
+}
+
+.gc-filter-count {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+button.gc-badge:hover,
+button.gc-chip:hover,
+.gc-filter:hover {
+  border-color: var(--gc-hue-fg);
+}
+
+button.gc-badge[aria-pressed='true'],
+button.gc-chip[aria-pressed='true'],
+.gc-filter[aria-pressed='true'] {
+  background: var(--gc-hue-solid);
+  border-color: var(--gc-hue-solid);
+  color: var(--gc-hue-on-solid);
+}
+
+.gc-clear {
+  background: transparent;
+  color: var(--gc-text);
+  border: 1px solid var(--gc-outline);
+  border-radius: 3px;
+  padding: 0 6px;
+}
+
+.gc-clear:hover {
+  border-color: var(--gc-text);
+}
+
+button.gc-badge:focus-visible,
+button.gc-chip:focus-visible,
+.gc-filter:focus-visible,
+.gc-clear:focus-visible {
+  outline: 2px solid var(--gc-hue-fg, var(--gc-text));
+  outline-offset: 1px;
+}
+
+tr.zA[data-gc-hidden],
+tr.zA[data-gc-hidden] * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }

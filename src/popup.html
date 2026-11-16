@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>Jev Inbox</title>
@@ -576,7 +576,7 @@
       <div class="header-top">
         <img class="brand-icon" src="assets/icon-32.png" width="20" height="20" alt="" />
         <span class="brand-name">Jev Inbox</span>
-        <span id="saved" class="saved">Saved</span>
+        <span id="saved" class="saved" role="status"></span>
         <label class="switch">
           <input id="enabled" type="checkbox" />
           <span class="switch-track" aria-hidden="true"></span>
@@ -765,7 +765,7 @@
       </div>
       <div class="test-row">
         <button id="testBtn" type="button">Test connection</button>
-        <span id="testResult" class="test-result"></span>
+        <span id="testResult" class="test-result" role="status"></span>
       </div>
       <p id="testHint" class="hint">
         Accept the notice above before testing the key.

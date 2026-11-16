@@ -540,6 +540,56 @@ try {
   await page.close();
 
   const popup = await context.newPage();
+
+  const manifest = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.action.default_icon, manifest.icons, 'toolbar icon uses the manifest icons');
+  const [, logoWidth, logoHeight] = readFileSync(join(root, 'assets', 'icon.svg'), 'utf8')
+    .match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/)
+    .map(Number);
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const icons = [];
+  for (const [size, path] of Object.entries(manifest.icons)) {
+    const icon = await popup.evaluate(async (src) => {
+      const image = new Image();
+      image.src = src;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let left = width;
+      let right = -1;
+      let top = height;
+      let bottom = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] < 128) continue;
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+          top = Math.min(top, y);
+          bottom = Math.max(bottom, y);
+        }
+      }
+      const corners = [0, width - 1, (height - 1) * width, height * width - 1].map((i) => data[i * 4 + 3]);
+      return { width, height, left, right, top, bottom, corners };
+    }, `chrome-extension://${extensionId}/${path}`);
+    const size_ = Number(size);
+    assert.equal(icon.width, size_, `icon-${size} is ${size} wide`);
+    assert.equal(icon.height, size_, `icon-${size} is ${size} tall`);
+    assert.deepEqual(icon.corners, [0, 0, 0, 0], `icon-${size} has a transparent canvas`);
+    assert.ok(icon.left >= 1 && icon.top >= 1, `icon-${size} is padded`);
+    assert.ok(icon.right <= size_ - 2 && icon.bottom <= size_ - 2, `icon-${size} is padded`);
+    const boxWidth = icon.right - icon.left + 1;
+    const boxHeight = icon.bottom - icon.top + 1;
+    const ratio = boxWidth / boxHeight / (logoWidth / logoHeight);
+    assert.ok(Math.abs(ratio - 1) < (size_ <= 16 ? 0.25 : 0.1), `icon-${size} keeps the logo's aspect ratio`);
+    assert.ok(Math.abs(icon.left - (size_ - 1 - icon.right)) <= 1, `icon-${size} is centred horizontally`);
+    assert.ok(Math.abs(icon.top - (size_ - 1 - icon.bottom)) <= 1, `icon-${size} is centred vertically`);
+    icons.push({ size: size_, box: `${boxWidth}x${boxHeight}+${icon.left}+${icon.top}` });
+  }
+
   async function shootPopup(state) {
     for (const theme of THEMES) {
       await popup.emulateMedia({ colorScheme: theme });
@@ -584,7 +634,7 @@ try {
 
   console.log(
     JSON.stringify(
-      { badges, chips, filtered, readFiltered, readDispatch, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
+      { badges, chips, icons, filtered, readFiltered, readDispatch, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, outDir },
       null,
       2
     )

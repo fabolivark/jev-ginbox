@@ -17,7 +17,9 @@ test('the store listing names its category, language, homepage, privacy policy a
   assert.match(field(listing, 'Language'), /English/);
   assert.equal(field(listing, 'Homepage URL'), REPO);
   assert.equal(field(listing, 'Privacy policy URL'), `${REPO}/blob/main/PRIVACY.md`);
-  assert.match(field(listing, 'Support email'), /^TODO/);
+  assert.equal(field(listing, 'Support email'), 'support@ab2web.com');
+  assert.match(field(listing, 'Support URL'), /support email below is the only contact/);
+  assert.doesNotMatch(listing, /\bTODO\b/);
 });
 
 test('the store listing never says message content stays unread', () => {

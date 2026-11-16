@@ -6,7 +6,11 @@ import {
   VIEW_SETTING_KEYS,
   isLabelConfig,
   isProvider,
+  labelIssue,
+  labelIssueText,
+  labelsToSave,
   type LabelConfig,
+  type LabelIssue,
   type Provider,
   type TestResult,
 } from './shared';
@@ -87,7 +91,6 @@ const labelsEl = document.getElementById('labels') as HTMLDivElement;
 const labelsEmpty = document.getElementById('labelsEmpty') as HTMLParagraphElement;
 const labelCount = document.getElementById('labelCount') as HTMLSpanElement;
 const addLabel = document.getElementById('addLabel') as HTMLButtonElement;
-const labelError = document.getElementById('labelError') as HTMLSpanElement;
 
 const viewInputs: Record<string, HTMLInputElement> = {
   viewInbox: document.getElementById('viewInbox') as HTMLInputElement,
@@ -99,6 +102,9 @@ const viewInputs: Record<string, HTMLInputElement> = {
 const keyHints: Record<KeyField['keyName'], string> = { apiKey: '', typesafeApiKey: '' };
 
 let draft: LabelConfig[] = [];
+let savedLabels: LabelConfig[] = [];
+const labelIssues = new Map<string, LabelIssue>();
+const labelIssueViews = new Map<string, () => void>();
 let acknowledged = false;
 let authFailed: unknown;
 let onGmail = false;
@@ -229,18 +235,38 @@ function armConfirm(
   });
 }
 
-function saveLabels(): void {
-  const next = draft.map(({ id, name, description }) => ({
-    id,
-    name: name.trim(),
-    description: description.trim(),
-  }));
-  if (next.some((label) => label.name.length === 0 || label.description.length === 0)) {
-    labelError.textContent = 'Each label needs a name and a description.';
-    return;
+// Saves every complete label and flags the incomplete ones, except `pendingId`, the label
+// whose other field is taking focus, so it is not flagged before it is filled in.
+function saveLabels(pendingId?: string): void {
+  for (const label of draft) {
+    const issue = labelIssue(label);
+    if (issue === undefined) labelIssues.delete(label.id);
+    else if (label.id !== pendingId) labelIssues.set(label.id, issue);
+    labelIssueViews.get(label.id)?.();
   }
-  labelError.textContent = '';
-  void chrome.storage.local.set({ labels: next.slice(0, MAX_LABELS) }).then(() => showSaved());
+  const next = labelsToSave(draft, savedLabels);
+  void chrome.storage.local.set({ labels: next }).then(() => {
+    savedLabels = next;
+    showSaved();
+  });
+}
+
+function recheckLabel(label: LabelConfig): void {
+  if (!labelIssues.has(label.id)) return;
+  const issue = labelIssue(label);
+  if (issue === undefined) labelIssues.delete(label.id);
+  else labelIssues.set(label.id, issue);
+  labelIssueViews.get(label.id)?.();
+}
+
+function markField(field: HTMLElement, invalid: boolean, errorId: string): void {
+  if (invalid) {
+    field.setAttribute('aria-invalid', 'true');
+    field.setAttribute('aria-describedby', errorId);
+  } else {
+    field.removeAttribute('aria-invalid');
+    field.removeAttribute('aria-describedby');
+  }
 }
 
 function renderLabels(): void {
@@ -248,6 +274,7 @@ function renderLabels(): void {
   addLabel.disabled = draft.length >= MAX_LABELS;
   labelCount.textContent = `${draft.length} / ${MAX_LABELS}`;
   labelsEmpty.hidden = draft.length > 0;
+  labelIssueViews.clear();
   for (let index = 0; index < draft.length; index++) {
     const item = draft[index];
     const card = document.createElement('div');
@@ -266,11 +293,14 @@ function renderLabels(): void {
     name.setAttribute('aria-label', `Label ${index + 1} name`);
     name.addEventListener('input', () => {
       item.name = name.value;
+      recheckLabel(item);
     });
     name.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') name.blur();
     });
-    name.addEventListener('blur', saveLabels);
+    const pendingOnBlur = (event: FocusEvent): string | undefined =>
+      event.relatedTarget instanceof Node && fields.contains(event.relatedTarget) ? item.id : undefined;
+    name.addEventListener('blur', (event) => saveLabels(pendingOnBlur(event)));
 
     const description = document.createElement('textarea');
     description.rows = 2;
@@ -283,6 +313,7 @@ function renderLabels(): void {
     };
     description.addEventListener('input', () => {
       item.description = description.value;
+      recheckLabel(item);
       grow();
     });
     description.addEventListener('keydown', (event) => {
@@ -291,7 +322,20 @@ function renderLabels(): void {
         description.blur();
       }
     });
-    description.addEventListener('blur', saveLabels);
+    description.addEventListener('blur', (event) => saveLabels(pendingOnBlur(event)));
+
+    const issueText = document.createElement('p');
+    issueText.className = 'label-issue';
+    issueText.id = `label-issue-${index}`;
+    const showIssue = (): void => {
+      const issue = labelIssues.get(item.id);
+      markField(name, issue?.name === true, issueText.id);
+      markField(description, issue?.description === true, issueText.id);
+      issueText.hidden = issue === undefined;
+      issueText.textContent = issue === undefined ? '' : labelIssueText(issue);
+    };
+    labelIssueViews.set(item.id, showIssue);
+    showIssue();
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -310,6 +354,7 @@ function renderLabels(): void {
 
     fields.appendChild(name);
     fields.appendChild(description);
+    fields.appendChild(issueText);
     card.appendChild(dot);
     card.appendChild(fields);
     card.appendChild(remove);
@@ -376,6 +421,7 @@ async function load(): Promise<void> {
   authFailed = stored.authFailed;
   updateTestRow();
   draft = Array.isArray(stored.labels) ? stored.labels.filter(isLabelConfig) : [];
+  savedLabels = draft.map((label) => ({ ...label }));
   renderLabels();
   for (const view of VIEWS) {
     const key = VIEW_SETTING_KEYS[view];

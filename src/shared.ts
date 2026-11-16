@@ -172,6 +172,35 @@ export function isLabelConfig(value: unknown): value is LabelConfig {
   );
 }
 
+export type LabelIssue = { name: boolean; description: boolean };
+
+export function labelIssue(label: LabelConfig): LabelIssue | undefined {
+  const name = label.name.trim().length === 0;
+  const description = label.description.trim().length === 0;
+  return name || description ? { name, description } : undefined;
+}
+
+export function labelIssueText(issue: LabelIssue): string {
+  const missing =
+    issue.name && issue.description ? 'a name and a description' : issue.name ? 'a name' : 'a description';
+  return `Add ${missing} to save this label.`;
+}
+
+// Each complete label saves on its own. An incomplete edit of a saved label keeps its saved
+// version until it is fixed; a new incomplete label is not saved yet. Ids never change.
+export function labelsToSave(draft: LabelConfig[], saved: LabelConfig[]): LabelConfig[] {
+  const next: LabelConfig[] = [];
+  for (const label of draft) {
+    if (labelIssue(label) === undefined) {
+      next.push({ id: label.id, name: label.name.trim(), description: label.description.trim() });
+      continue;
+    }
+    const previous = saved.find((item) => item.id === label.id);
+    if (previous !== undefined) next.push(previous);
+  }
+  return next.slice(0, MAX_LABELS);
+}
+
 export function isClassification(value: unknown): value is Classification {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;

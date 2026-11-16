@@ -456,11 +456,13 @@
         background: var(--bg);
         color: var(--danger);
       }
-      .label-error {
-        display: block;
-        min-height: 14px;
+      .label-issue {
+        margin: 0;
         font-size: 11px;
         color: var(--danger);
+      }
+      .label-card [aria-invalid="true"] {
+        border-color: var(--danger);
       }
       .footer {
         display: flex;
@@ -713,7 +715,6 @@
       </p>
       <div id="labels"></div>
       <button id="addLabel" type="button">Add label</button>
-      <span id="labelError" class="label-error"></span>
     </section>
 
     <section class="section">

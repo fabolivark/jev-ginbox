@@ -2,6 +2,8 @@
 .env.*
 node_modules/
 dist/
+dev-dist/
+release/
 fixtures/
 .DS_Store
 dev/store/raw/

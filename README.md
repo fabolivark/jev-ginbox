@@ -69,6 +69,17 @@ Only these fields of each unread row, and of each read row when "Also classify r
 - Keyboard `j` and `k` follow Gmail's own row order, not the order on screen, so the selection jumps between slots as it moves down the list.
 - It is an unofficial project. Not affiliated with Google, TypeSafe, or Vercel.
 
+## Release
+
+The version lives in `package.json` and `manifest.json`, and the two must match. `npm run package` needs the `zip` command.
+
+1. Set the new version in both `package.json` and `manifest.json`.
+2. In `CHANGELOG.md`, move the Unreleased entries under a heading for the new version and its date.
+3. Run `npm run package`. It refuses to run when the two versions differ, builds `dist/` from scratch, and writes `release/jev-inbox-<version>.zip`.
+4. Load `dist/` unpacked in Chrome and check the popup and a Gmail tab.
+5. Commit, tag the commit `v<version>`, and push the commit and the tag.
+6. Upload the zip in the Chrome Web Store Developer Dashboard. CI builds the same zip on every push and pull request and keeps it as the `jev-inbox-zip` artifact.
+
 ## Development
 
 ```bash
@@ -78,7 +89,7 @@ npm test           # unit tests
 npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, screenshot the filtered list and the popup
 ```
 
-`npm run build` writes `dist/`, which holds the unpacked extension.
+`npm run build` writes `dist/`, which holds only the unpacked extension, and `dev-dist/`, which holds the demo and store stubs.
 
 `dev/demo.html` is a standalone Gmail-like list with made-up mail, a stubbed `chrome` API, and canned classifications, so nothing is sent anywhere. Build first, then open the file in Chrome. It accepts `?theme=dark` for the dark list and `?ack=0` to simulate a browser that has not accepted the first-run notice. Clicking a row resolves its thread the way Gmail does, by the row's index in the list, and reports it as `Opened: <subject>` in the demo line, so a wrong mapping shows up as a wrong subject.
 

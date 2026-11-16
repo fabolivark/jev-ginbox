@@ -1,3 +1,4 @@
+import manifest from '../manifest.json';
 import {
   cacheVersion,
   contentState,
@@ -110,7 +111,7 @@ Object.assign(window, {
       id: 'demo',
       sendMessage: respond,
       onMessage: { addListener: () => {} },
-      getManifest: () => ({ version: '0.1.0' }),
+      getManifest: () => ({ version: manifest.version }),
     },
   },
 });

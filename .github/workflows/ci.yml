@@ -29,3 +29,19 @@ jobs:
           name: e2e-results
           path: e2e-results/
           if-no-files-found: ignore
+
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jev-inbox-zip
+          path: release/jev-inbox-*.zip
+          if-no-files-found: error

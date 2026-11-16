@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS, type Settings } from '../../src/shared';
+import manifest from '../../manifest.json';
 
 type Store = Record<string, unknown>;
 type Overrides = Partial<Settings> & { labels?: unknown; crop?: string };
@@ -57,7 +58,7 @@ Object.assign(window, {
     },
     runtime: {
       sendMessage: async () => ({ ok: true }),
-      getManifest: () => ({ version: '0.1.0' }),
+      getManifest: () => ({ version: manifest.version }),
     },
   },
 });

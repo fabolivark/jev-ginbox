@@ -13,6 +13,7 @@ Every version of Jev Inbox for Gmail, newest first. The version in `package.json
 - The cache keeps the sender, subject and date of each classified thread, locally only. "Manage" in the popup opens a page that groups the classified threads by label and sender, with filters, and opens a Gmail search for the picked senders, split into numbered searches when long, to delete or archive a whole group in Gmail.
 - The bar's "Select in Gmail" buttons tick Gmail's own checkbox on every loaded row with a label or the Critical badge, so Gmail's toolbar deletes or archives that category; the bar shows the selected count and a Clear selection button. The extension never deletes or moves mail itself.
 - `npm run package` builds a clean `dist/` and writes `release/jev-inbox-<version>.zip`, and fails when `package.json` and `manifest.json` carry different versions. CI builds the zip on every push and pull request.
+- The store images show the current product: the Strictness section, the three-bullet notice with Finish setup in the bar, four labels with the olive fourth hue, the popup status line, and the bar's Filter and Select in Gmail controls.
 - `dist/` holds only the extension. The demo and the store stub build to `dev-dist/` and read their version from `manifest.json`.
 
 ## 0.1.0

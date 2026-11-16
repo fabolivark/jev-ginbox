@@ -71,6 +71,7 @@ const labels = [
   { id: 'visa', name: 'Visa', description: 'Residence permits, IND letters, immigration appointments' },
   { id: 'money', name: 'Money', description: 'Invoices, payments, bank statements' },
   { id: 'home', name: 'Home', description: 'Rent, utilities, landlord and building notices' },
+  { id: 'friends', name: 'Friends', description: 'Messages from friends and plans to meet' },
 ];
 
 if (!existsSync(join(root, 'dist', 'popup.js')) || !existsSync(join(root, 'dev-dist', 'stub.js'))) {
@@ -101,6 +102,7 @@ async function popupRender(name, state) {
 
 await popupRender('popup-set', { privacyAck: true, provider: 'gateway', apiKeyHint: 'a1b2', threshold: 0.7, labels });
 await popupRender('popup-firstrun', { privacyAck: false, provider: 'gateway', labels });
+await popupRender('popup-key', { privacyAck: true, provider: 'gateway', apiKeyHint: 'a1b2', threshold: 0.7, labels, crop: 'key' });
 
 const scenes = [
   ['hero', '01-unread-first'],

@@ -57,10 +57,10 @@ No other hosts are requested. The extension makes no request to any server of it
 
 Built by `npm run store-images` from the sources in `dev/store/`. Screenshots are made-up mail only, no real inbox.
 
-- `docs/store/01-unread-first.png` (1280x800): the inbox with unread mail first and the critical rows on top, chips in place.
-- `docs/store/02-your-labels.png` (1280x800): the popup's labels editor over the reordered list.
+- `docs/store/01-unread-first.png` (1280x800): the inbox with unread mail first and the critical rows on top, chips in place, and the bar's Filter loaded rows and Select in Gmail controls.
+- `docs/store/02-your-labels.png` (1280x800): the popup's labels editor, four labels including the olive fourth hue, over the reordered list.
 - `docs/store/03-dark-theme.png` (1280x800): the same list in Gmail's dark theme.
-- `docs/store/04-privacy.png` (1280x800): the first-run notice, before anything is sent.
-- `docs/store/05-search-and-key.png` (1280x800): search results, with the popup's Vercel AI Gateway connection.
+- `docs/store/04-privacy.png` (1280x800): the first-run notice as three bullets, before anything is sent, with Finish setup in the Gmail bar.
+- `docs/store/05-search-and-key.png` (1280x800): search results, with the popup's Vercel AI Gateway connection, Show on and Strictness.
 - `docs/store/promo-small.png` (440x280): the small promo tile.
 - `docs/store/promo-marquee.png` (1400x560): the marquee promo tile.

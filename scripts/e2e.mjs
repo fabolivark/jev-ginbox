@@ -611,6 +611,11 @@ try {
   assert.match(notice, /first part of the (email )?body/i, 'notice says the snippet is body text');
   assert.match(notice, /forwards/i, 'notice says the Gateway forwards to TypeSafe');
   assert.match(notice, /read emails/i, 'notice says read emails are sent when the toggle is on');
+  const repoLinks = await popup.locator('a[href*="github.com"]').evaluateAll((links) => links.map((a) => a.href));
+  assert.equal(repoLinks.length, 3, 'popup links the repository and the privacy policy');
+  for (const href of repoLinks) {
+    assert.ok(href.startsWith('https://github.com/fabolivark/jev-ginbox'), `popup link points to the fork: ${href}`);
+  }
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
   await setClassifyRead(worker, true);
   await shootPopup('ready');

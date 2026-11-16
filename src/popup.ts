@@ -10,6 +10,7 @@ import {
   type Provider,
   type TestResult,
 } from './shared';
+import { canTestConnection, isGmailUrl, popupStatusText, testHintText } from './status';
 
 const CACHE_PREFIX = 'crit:';
 const CHIP_HUES = 8;
@@ -24,6 +25,7 @@ const providerInputs: Record<Provider, HTMLInputElement> = {
 };
 
 type KeyField = {
+  provider: Provider;
   keyName: 'apiKey' | 'typesafeApiKey';
   hintName: 'apiKeyHint' | 'typesafeApiKeyHint';
   input: HTMLInputElement;
@@ -38,6 +40,7 @@ type KeyField = {
 
 const keyFields: Record<Provider, KeyField> = {
   gateway: {
+    provider: 'gateway',
     keyName: 'apiKey',
     hintName: 'apiKeyHint',
     input: document.getElementById('apiKey') as HTMLInputElement,
@@ -50,6 +53,7 @@ const keyFields: Record<Provider, KeyField> = {
     remove: document.getElementById('apiKeyRemove') as HTMLButtonElement,
   },
   typesafe: {
+    provider: 'typesafe',
     keyName: 'typesafeApiKey',
     hintName: 'typesafeApiKeyHint',
     input: document.getElementById('typesafeApiKey') as HTMLInputElement,
@@ -95,6 +99,9 @@ const keyHints: Record<KeyField['keyName'], string> = { apiKey: '', typesafeApiK
 
 let draft: LabelConfig[] = [];
 let acknowledged = false;
+let authFailed: unknown;
+let onGmail = false;
+let keySave: Promise<void> | undefined;
 let savedTimer: number | undefined;
 const confirmTimers = new WeakMap<HTMLButtonElement, number>();
 
@@ -115,20 +122,32 @@ function updateKeyRows(): void {
   typesafeApiKeyRow.hidden = !isTypesafe;
 }
 
+function selectedField(): KeyField {
+  return keyFields[providerInputs.typesafe.checked ? 'typesafe' : 'gateway'];
+}
+
+function hasSavedKey(field: KeyField): boolean {
+  return keyHints[field.keyName].length > 0;
+}
+
 function updateStatus(): void {
-  const hint = keyHints[providerInputs.typesafe.checked ? 'typesafeApiKey' : 'apiKey'];
-  if (!enabled.checked) {
-    statusLine.textContent = 'Paused';
-  } else if (hint.length === 0) {
-    statusLine.textContent = 'Add a key to start';
-  } else {
-    statusLine.textContent = 'Active on this Gmail tab';
-  }
+  const field = selectedField();
+  statusLine.textContent = popupStatusText({
+    enabled: enabled.checked,
+    acknowledged,
+    hasKey: hasSavedKey(field),
+    keyRejected: authFailed === field.provider,
+    onGmail,
+  });
 }
 
 function updateTestRow(): void {
-  testBtn.disabled = !acknowledged;
-  testHint.hidden = acknowledged;
+  const field = selectedField();
+  const saved = hasSavedKey(field);
+  testBtn.disabled = !canTestConnection(acknowledged, saved, field.input.value);
+  const hint = testHintText(acknowledged, saved || field.input.value.trim().length > 0);
+  testHint.hidden = hint === null;
+  testHint.textContent = hint ?? '';
 }
 
 function showSavedKey(field: KeyField, hint: string): void {
@@ -148,25 +167,36 @@ function revealKeyInput(field: KeyField): void {
   field.input.focus();
 }
 
-function saveKey(field: KeyField): void {
+async function clearAuthFailed(field: KeyField): Promise<void> {
+  if (authFailed !== field.provider) return;
+  authFailed = undefined;
+  await chrome.storage.local.remove(['authFailed']);
+}
+
+function saveKey(field: KeyField): Promise<void> {
   const value = field.input.value.trim();
-  if (value.length === 0) return;
+  if (value.length === 0) return keySave ?? Promise.resolve();
   const hint = value.slice(-4);
-  void chrome.storage.local
-    .set({ [field.keyName]: value, [field.hintName]: hint })
-    .then(() => {
-      showSavedKey(field, hint);
-      updateStatus();
-      showSaved();
-    });
+  keySave = (async () => {
+    await chrome.storage.local.set({ [field.keyName]: value, [field.hintName]: hint });
+    await clearAuthFailed(field);
+    showSavedKey(field, hint);
+    updateStatus();
+    updateTestRow();
+    showSaved();
+  })();
+  return keySave;
 }
 
 function removeKey(field: KeyField): void {
-  void chrome.storage.local.remove([field.keyName, field.hintName]).then(() => {
+  void (async () => {
+    await chrome.storage.local.remove([field.keyName, field.hintName]);
+    await clearAuthFailed(field);
     showSavedKey(field, '');
     updateStatus();
+    updateTestRow();
     showSaved('Removed');
-  });
+  })();
 }
 
 function armConfirm(
@@ -302,6 +332,7 @@ async function runTestConnection(): Promise<void> {
   testResult.className = 'test-result';
   testResult.textContent = '';
   try {
+    await saveKey(selectedField());
     const response = (await chrome.runtime.sendMessage({ type: 'test' })) as TestResult;
     if (response.ok) {
       testResult.className = 'test-result ok';
@@ -329,7 +360,7 @@ function clearCache(): void {
 }
 
 async function load(): Promise<void> {
-  const stored = await chrome.storage.local.get([...POPUP_SETTING_KEYS]);
+  const stored = await chrome.storage.local.get([...POPUP_SETTING_KEYS, 'authFailed']);
   const storedProvider = isProvider(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider;
   providerInputs[storedProvider].checked = true;
   showSavedKey(keyFields.gateway, typeof stored.apiKeyHint === 'string' ? stored.apiKeyHint : '');
@@ -346,6 +377,7 @@ async function load(): Promise<void> {
   thresholdValue.textContent = percent(value);
   acknowledged = stored.privacyAck === true;
   privacyNotice.hidden = acknowledged;
+  authFailed = stored.authFailed;
   updateTestRow();
   draft = Array.isArray(stored.labels) ? stored.labels.filter(isLabelConfig) : [];
   renderLabels();
@@ -356,6 +388,17 @@ async function load(): Promise<void> {
   }
   version.textContent = `v${chrome.runtime.getManifest().version}`;
   updateStatus();
+  onGmail = await activeTabIsGmail();
+  updateStatus();
+}
+
+async function activeTabIsGmail(): Promise<boolean> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return isGmailUrl(tab?.url);
+  } catch {
+    return false;
+  }
 }
 
 for (const provider of ['gateway', 'typesafe'] as const) {
@@ -363,6 +406,7 @@ for (const provider of ['gateway', 'typesafe'] as const) {
     if (!providerInputs[provider].checked) return;
     updateKeyRows();
     updateStatus();
+    updateTestRow();
     void chrome.storage.local.set({ provider }).then(() => showSaved());
   });
 }
@@ -370,8 +414,9 @@ for (const provider of ['gateway', 'typesafe'] as const) {
 for (const field of [keyFields.gateway, keyFields.typesafe]) {
   wireEye(field.eye, field.input);
   field.input.addEventListener('change', () => {
-    saveKey(field);
+    void saveKey(field);
   });
+  field.input.addEventListener('input', updateTestRow);
   field.input.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
@@ -382,6 +427,7 @@ for (const field of [keyFields.gateway, keyFields.typesafe]) {
   });
   field.cancel.addEventListener('click', () => {
     showSavedKey(field, keyHints[field.keyName]);
+    updateTestRow();
   });
   armConfirm(field.remove, () => removeKey(field), 'Confirm remove key', 'Confirm');
 }
@@ -416,6 +462,11 @@ addLabel.addEventListener('click', () => {
   renderLabels();
 });
 
+// Keep focus in a typed key so its `change` save cannot move the button mid-click;
+// the click handler saves the key itself before testing.
+testBtn.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+});
 testBtn.addEventListener('click', () => {
   void runTestConnection();
 });
@@ -424,9 +475,16 @@ gotIt.addEventListener('click', () => {
   acknowledged = true;
   privacyNotice.hidden = true;
   updateTestRow();
+  updateStatus();
   void chrome.storage.local.set({ privacyAck: true }).then(() => showSaved());
 });
 
 armConfirm(clear, clearCache, 'Confirm clear cache');
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !('authFailed' in changes)) return;
+  authFailed = changes.authFailed.newValue;
+  updateStatus();
+});
 
 void load();

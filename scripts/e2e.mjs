@@ -439,7 +439,7 @@ async function checkHalted(page, worker, rows, version, providerCalls) {
   await worker.evaluate(() => chrome.storage.local.set({ privacyAck: true }));
   await page.waitForFunction(() => window.e2eMarkerSeen === true, null, { timeout: 10000 });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('#gc-unread', { hasText: '401/403' }).waitFor({ timeout: 15000 });
+  await page.locator('#gc-unread', { hasText: 'The provider rejected the API key.' }).waitFor({ timeout: 15000 });
   await settle(page);
   assert.equal(await page.locator('.Cp tr.zA', { hasText: 'retrying' }).count(), 0, 'no row says retrying after a 401');
   assert.equal(

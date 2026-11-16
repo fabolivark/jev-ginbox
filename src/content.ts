@@ -34,9 +34,9 @@ import {
   shownLabels,
   type RowFilter,
 } from './filter';
-import { pendingRow, type PendingRow } from './status';
+import { isAuthRejection, pendingRow, type PendingRow } from './status';
 import { parseColor, themeFromBackgrounds, type GmailTheme } from './theme';
-import { isAuthStatus, rowFailureText } from './errors';
+import { rowFailureText } from './errors';
 
 type Entry = {
   key: string;
@@ -680,7 +680,7 @@ async function dispatchPending(): Promise<void> {
       const failure = response.errors[entry.key];
       rowFailures.push(failure);
       recordFailure(entry.key);
-      if (isAuthStatus(failure?.status)) authFailure = true;
+      if (isAuthRejection(failure?.status)) authFailure = true;
     }
     if (authFailure) halted = true;
     if (rowFailures.length > 0) errorMessage = rowFailureText(rowFailures);

@@ -1,13 +1,10 @@
 import type { ClassifyError, TestResult } from './shared';
-
-export function isAuthStatus(status: number | undefined): boolean {
-  return status === 401 || status === 403;
-}
+import { isAuthRejection } from './status';
 
 // The one place a provider failure becomes user-facing text. The provider's own message is never shown.
 export function providerErrorText(status: number | undefined): string {
   if (status === undefined) return 'Could not reach the provider. Check your connection.';
-  if (isAuthStatus(status)) return 'The provider rejected the API key. Replace it in the popup.';
+  if (isAuthRejection(status)) return 'The provider rejected the API key. Replace it in the popup.';
   if (status === 429) return 'The provider is rate limiting requests. Try again in a minute.';
   if (status >= 500) return 'The provider is unavailable right now. Try again later.';
   return `The provider refused the request (status ${status}).`;
@@ -15,7 +12,7 @@ export function providerErrorText(status: number | undefined): string {
 
 export function rowFailureText(failures: readonly (ClassifyError | undefined)[]): string {
   const known = failures.filter((failure): failure is ClassifyError => failure !== undefined);
-  const auth = known.find((failure) => isAuthStatus(failure.status));
+  const auth = known.find((failure) => isAuthRejection(failure.status));
   const withStatus = known.find((failure) => failure.status !== undefined);
   return providerErrorText((auth ?? withStatus)?.status);
 }

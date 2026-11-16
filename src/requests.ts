@@ -8,7 +8,9 @@ import {
   type TestMessage,
 } from './shared';
 
-export type Request = ClassifyMessage | StateMessage | TestMessage;
+export type OpenSetupMessage = { type: 'openSetup' };
+
+export type Request = ClassifyMessage | StateMessage | TestMessage | OpenSetupMessage;
 
 const GMAIL_ORIGIN = 'https://mail.google.com';
 
@@ -30,12 +32,10 @@ function fromGmail(sender: chrome.runtime.MessageSender, runtimeId: string): boo
   );
 }
 
+// The popup has no tab; the same page opened as the setup tab has one. Both are
+// this extension's origin, which no web page or content script can claim.
 function fromExtensionPage(sender: chrome.runtime.MessageSender, runtimeId: string): boolean {
-  return (
-    sender.id === runtimeId &&
-    sender.tab === undefined &&
-    originOf(sender.url) === `chrome-extension://${runtimeId}`
-  );
+  return sender.id === runtimeId && originOf(sender.url) === `chrome-extension://${runtimeId}`;
 }
 
 function classifyRequest(value: object): ClassifyMessage | undefined {
@@ -61,6 +61,9 @@ export function parseRequest(
   }
   if (value.type === 'state') {
     return fromGmail(sender, runtimeId) ? { type: 'state' } : undefined;
+  }
+  if (value.type === 'openSetup') {
+    return fromGmail(sender, runtimeId) ? { type: 'openSetup' } : undefined;
   }
   if (value.type === 'test') {
     return fromExtensionPage(sender, runtimeId) ? { type: 'test' } : undefined;

@@ -73,10 +73,36 @@ test('classify with malformed rows is rejected', () => {
   assert.equal(parseRequest(message, gmailTab, RUNTIME_ID), undefined);
 });
 
-test('test is accepted only from the popup', () => {
+const setupTab = {
+  id: RUNTIME_ID,
+  url: `chrome-extension://${RUNTIME_ID}/popup.html?setup=1`,
+  tab: { id: 9 } as chrome.tabs.Tab,
+} satisfies chrome.runtime.MessageSender;
+
+test('test is accepted from the popup and from the setup tab', () => {
   assert.equal(parseRequest({ type: 'test' }, popup, RUNTIME_ID)?.type, 'test');
+  assert.equal(parseRequest({ type: 'test' }, setupTab, RUNTIME_ID)?.type, 'test');
+});
+
+test('test is refused from Gmail, other extensions and other origins', () => {
   assert.equal(parseRequest({ type: 'test' }, gmailTab, RUNTIME_ID), undefined);
   assert.equal(parseRequest({ type: 'test' }, { ...popup, id: 'other' }, RUNTIME_ID), undefined);
+  assert.equal(parseRequest({ type: 'test' }, { ...setupTab, id: 'other' }, RUNTIME_ID), undefined);
+  const otherExtension = { ...setupTab, url: 'chrome-extension://otherextensionidotherextensionid/popup.html' };
+  assert.equal(parseRequest({ type: 'test' }, otherExtension, RUNTIME_ID), undefined);
+  const lookalike = { ...setupTab, url: `https://${RUNTIME_ID}.example/popup.html` };
+  assert.equal(parseRequest({ type: 'test' }, lookalike, RUNTIME_ID), undefined);
+  const { url: _url, ...noUrl } = setupTab;
+  assert.equal(parseRequest({ type: 'test' }, noUrl, RUNTIME_ID), undefined);
+});
+
+test('openSetup is accepted only from the Gmail content script', () => {
+  assert.equal(parseRequest({ type: 'openSetup' }, gmailTab, RUNTIME_ID)?.type, 'openSetup');
+  assert.equal(parseRequest({ type: 'openSetup' }, popup, RUNTIME_ID), undefined);
+  assert.equal(parseRequest({ type: 'openSetup' }, setupTab, RUNTIME_ID), undefined);
+  assert.equal(parseRequest({ type: 'openSetup' }, { ...gmailTab, id: 'other' }, RUNTIME_ID), undefined);
+  const notGmail = { ...gmailTab, url: 'https://mail.google.com.evil.example/mail' };
+  assert.equal(parseRequest({ type: 'openSetup' }, notGmail, RUNTIME_ID), undefined);
 });
 
 test('unknown messages are rejected', () => {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkManage } from './e2e-manage.mjs';
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..');
 const dist = join(root, 'dist');
@@ -1205,9 +1206,12 @@ try {
   await worker.evaluate(() => chrome.storage.local.set({ enabled: true, viewSearch: false }));
   const labelsEditor = await checkLabelsEditor(popup);
 
+  const gmailMax = Number(readFileSync(join(root, 'src', 'triage.ts'), 'utf8').match(/GMAIL_QUERY_MAX = (\d+)/)[1]);
+  const manage = await checkManage({ context, worker, popup, extensionId, outDir, cacheVersion, widths: WIDTHS, themes: THEMES, gmailMax });
+
   console.log(
     JSON.stringify(
-      { setupTab, readyBadge, badges, chips, icons, popupAxe, labelsEditor, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
+      { setupTab, readyBadge, badges, chips, icons, manage, popupAxe, labelsEditor, filtered, readFiltered, readDispatch, finishSetup, halted, theme, storageRead, testFromTab, oversized, providerCalls: providerCalls.length, searchChecked, popupStates, barError, paused, outDir },
       null,
       2
     )

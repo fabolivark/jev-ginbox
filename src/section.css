@@ -128,7 +128,14 @@
   --gc-hue-on-solid: #ffffff;
 }
 
-.gc-hue-3,
+.gc-hue-3 {
+  --gc-hue-bg: #eef3dc;
+  --gc-hue-fg: #4f5a1a;
+  --gc-hue-solid: #5a6e00;
+  --gc-hue-on-solid: #ffffff;
+}
+
+/* Red belongs to Critical alone: no label hue sits within 30 degrees of it. */
 .gc-badge,
 .gc-filter-critical {
   --gc-hue-bg: #fce8e6;
@@ -181,12 +188,18 @@
 
 [data-gc-theme='dark'] .gc-hue-2 {
   --gc-hue-bg: #3a2a14;
-  --gc-hue-fg: #fdc69c;
-  --gc-hue-solid: #fcad70;
+  --gc-hue-fg: #fdd28a;
+  --gc-hue-solid: #fbbc5a;
   --gc-hue-on-solid: #202124;
 }
 
-[data-gc-theme='dark'] .gc-hue-3,
+[data-gc-theme='dark'] .gc-hue-3 {
+  --gc-hue-bg: #2c3314;
+  --gc-hue-fg: #cfe39a;
+  --gc-hue-solid: #b5cf6b;
+  --gc-hue-on-solid: #202124;
+}
+
 [data-gc-theme='dark'] .gc-badge,
 [data-gc-theme='dark'] .gc-filter-critical {
   --gc-hue-bg: #42201e;

@@ -146,3 +146,43 @@ test('the Finish setup button uses the bar text on the list, like Clear', () => 
   assert.equal(declarations.get('color'), 'var(--gc-text)', '.gc-setup text is the AA-checked --gc-text');
   assert.equal(declarations.get('background'), 'transparent', '.gc-setup sits on the list background');
 });
+
+function hueOf(c: Rgba): { hue: number; saturation: number } {
+  const [r, g, b] = [c.r / 255, c.g / 255, c.b / 255];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  if (delta === 0) return { hue: 0, saturation };
+  const sector = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  return { hue: (sector * 60 + 360) % 360, saturation };
+}
+
+function hueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+const MIN_HUE_GAP = 30;
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`Critical uses a hue no label chip uses in ${theme}`, () => {
+    const scoped = (scope: string): Tokens => {
+      const light = tokensFor((part) => part === scope);
+      return theme === 'light' ? light : { ...light, ...tokensFor((part) => part === `${DARK} ${scope}`) };
+    };
+    const badge = scoped('.gc-badge');
+    assert.deepEqual(scoped('.gc-filter-critical'), badge, 'the bar Critical button matches the row badge');
+    for (let hue = 0; hue < 8; hue++) {
+      const label = scoped(`.gc-hue-${hue}`);
+      for (const name of ['--gc-hue-fg', '--gc-hue-bg', '--gc-hue-solid']) {
+        const where = `${theme} .gc-hue-${hue} ${name}`;
+        const own = hueOf(color(label, name, where));
+        if (own.saturation < 0.15) continue;
+        const gap = hueGap(own.hue, hueOf(color(badge, name, `${theme} .gc-badge`)).hue);
+        assert.ok(gap >= MIN_HUE_GAP, `${where} is ${gap.toFixed(0)} degrees from Critical`);
+      }
+    }
+  });
+}

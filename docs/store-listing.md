@@ -9,7 +9,7 @@ Draft text for the store listing. Nothing here is published.
 - Homepage URL: https://github.com/fabolivark/jev-ginbox
 - Privacy policy URL: https://github.com/fabolivark/jev-ginbox/blob/main/PRIVACY.md
 - Support URL: none. Issues are disabled on the repository, so the support email below is the only contact.
-- Support email: TODO for the owner to fill in before submitting. Do not publish without a real, monitored address.
+- Support email: support@ab2web.com
 
 ## Short description
 

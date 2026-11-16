@@ -15,12 +15,13 @@ Stack: TypeScript, esbuild, Chrome MV3.
 
 Commands:
 
-- `npm run build`: bundles `src/`, `dev/demo.ts`, and `dev/store/stub.ts` to `dist/` (esbuild) and copies `manifest.json`, `popup.html`, `section.css`, and `assets/`.
+- `npm run build`: bundles `src/` to `dist/` (esbuild) and copies `manifest.json`, `popup.html`, `section.css`, and the PNGs in `assets/`, so `dist/` holds only the extension. `dev/demo.ts` and `dev/store/stub.ts` bundle to the gitignored `dev-dist/`.
 - `npm run watch`: same build, rebuilds on change.
 - `npm run typecheck`: `tsc --noEmit` on `src/`, then on `src/` and `tests/` with `tsconfig.test.json`.
 - `npm test`: bundles `tests/*.test.ts` into the gitignored `.test-dist/` and runs them with `node --test`.
 - `npm run e2e`: builds, loads `dist/` into Playwright's Chromium, serves the `dev/demo.html` markup at `https://mail.google.com`, seeds settings and cache through the service worker, checks that rows are ordered and chipped with no provider call, that the content script cannot read storage, and that the worker refuses `test` from Gmail and an oversized batch, checks that the first-run notice says the snippet is body text and that the Gateway forwards to TypeSafe, then screenshots the popup in the notice and ready states at 1440, 768, 390 and 320 in light and dark into the gitignored `e2e-results/`. CI (`.github/workflows/ci.yml`) runs typecheck, test, build and e2e.
 - `npm run store-images`: runs the build, then `scripts/store-images.mjs`, which renders the popup states, the five Gmail-window screenshots and the two promo tiles into `docs/store/`.
+- `npm run package`: `scripts/package.mjs` fails unless `package.json` and `manifest.json` carry the same version, runs a clean build, checks that `dist/` holds every file the manifest references, and zips `dist/` with the `zip` command into the gitignored `release/jev-inbox-<version>.zip`. The `package` job in CI runs it and uploads the zip as the `jev-inbox-zip` artifact. `tests/package.test.ts` runs the build and the package in a temporary copy of the repo and checks the zip's exact file list.
 
 File map:
 
@@ -35,7 +36,8 @@ File map:
 - `src/section.css`: styles for the status bar, the Critical badge, and the inline label chips, all following Gmail's current theme.
 - `assets/icon.svg`: icon source. `assets/icon-{16,32,48,128}.png` are rendered from it and copied into `dist/assets` by the build.
 - `dev/demo.html` and `dev/demo.ts`: Gmail-like demo list with made-up mail, a stubbed `chrome` API, and canned classifications. Build first, then open the file. `?theme=dark` for the dark list, `?ack=0` for a browser that has not accepted the notice. `fixtures/` stays gitignored.
-- `dev/store/`: sources for the Chrome Web Store images. `scene.html` is the Gmail-like Chrome window, driven by a `scene` query param (`hero`, `labels`, `dark`, `privacy`, `search`) and `nocallout=1` for the clean hero render, with the list authored inline from the same made-up mail as `dev/demo.html`. `promo.html` is the small and marquee promo tile, driven by `size`. `stub.ts` stubs `chrome.storage` and `chrome.runtime` with a state decoded from a `state` query param, the same technique as `dev/demo.ts`, so the real `dist/popup.html` and `popup.js` render the popup scenarios. `scripts/store-images.mjs` injects `stub.js` into a copy of `dist/popup.html`, screenshots the popup states, the five scenes and the clean hero with headless Chrome, and downsizes the 2x renders into `docs/store/`; intermediates land in the gitignored `dev/store/raw/`. Run it with `npm run store-images`.
+- `dev/store/`: sources for the Chrome Web Store images. `scene.html` is the Gmail-like Chrome window, driven by a `scene` query param (`hero`, `labels`, `dark`, `privacy`, `search`) and `nocallout=1` for the clean hero render, with the list authored inline from the same made-up mail as `dev/demo.html`. `promo.html` is the small and marquee promo tile, driven by `size`. `stub.ts` stubs `chrome.storage` and `chrome.runtime` with a state decoded from a `state` query param, the same technique as `dev/demo.ts`, so the real `dist/popup.html` and `popup.js` render the popup scenarios. Both stubs report the version from `manifest.json`. `scripts/store-images.mjs` writes a copy of `dist/popup.html` to `dev-dist/popup-store.html` with a `<base href="../dist/">` and `stub.js` injected, screenshots the popup states, the five scenes and the clean hero with headless Chrome, and downsizes the 2x renders into `docs/store/`; intermediates land in the gitignored `dev/store/raw/`. Run it with `npm run store-images`.
+- `CHANGELOG.md`: one entry per version. The release steps are in `README.md` under Release.
 
 All work ends on `main` with a commit. No push, no PR, no release without Omid.
 Thinking, strategy, and decisions live outside this repo.

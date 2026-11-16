@@ -56,6 +56,9 @@ Object.assign(window, {
         },
       },
     },
+    tabs: {
+      query: async () => [{ url: 'https://mail.google.com/mail/u/0/#inbox' }],
+    },
     runtime: {
       sendMessage: async () => ({ ok: true }),
       getManifest: () => ({ version: manifest.version }),

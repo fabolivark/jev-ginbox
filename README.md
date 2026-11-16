@@ -38,7 +38,7 @@ Jev Inbox classifies through Jev, reachable either way:
 - **Vercel AI Gateway**: create a key in the Vercel dashboard (`https://vercel.com/docs/ai-gateway`), pick "Vercel AI Gateway" in the popup, and paste the key.
 - **TypeSafe**: create a key at `https://docs.typesafe.ai`, pick "TypeSafe" in the popup, and paste the key.
 
-Keys stay in `chrome.storage.local`, are only read by the extension's service worker, and are sent only to the provider you selected. The popup keeps only the last four characters of each key, so it can show that one is saved without reading it back; Replace and Remove are there when you want to change it. "Test connection" runs one tiny classification on a fixed dummy state and reports the result inline.
+Keys stay in `chrome.storage.local`, are only read by the extension's service worker, and are sent only to the provider you selected. The popup keeps only the last four characters of each key, so it can show that one is saved without reading it back; Replace and Remove are there when you want to change it. "Test connection" runs one tiny classification on a fixed dummy state and reports the result inline; it stays disabled until the notice is accepted and a key is saved or typed, and a typed key is saved before the test runs. The line under the switch says what is missing, in this order: Paused, the notice, a key, a key the provider rejected with 401 or 403 on the last call, or a tab that is not Gmail; otherwise it reads "Active on this Gmail tab".
 
 ## Labels
 
@@ -86,7 +86,7 @@ The version lives in `package.json` and `manifest.json`, and the two must match.
 npm run watch      # rebuild on change
 npm run typecheck  # tsc --noEmit
 npm test           # unit tests
-npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter and the icons, screenshot the filtered list and the popup
+npm run e2e        # build, load dist/ in Chromium against a Gmail fixture, check the filter, the icons and the halted states, screenshot the list and the popup states
 npm run icons      # render assets/icon.svg into the icon PNGs
 ```
 

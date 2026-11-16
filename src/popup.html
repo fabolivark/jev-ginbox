@@ -224,6 +224,11 @@
           border-radius: 0;
         }
       }
+      /* Paused: the settings stay usable but read as off; the header keeps full strength. */
+      body.paused .section,
+      body.paused .footer {
+        opacity: 0.5;
+      }
       .section {
         display: flex;
         flex-direction: column;

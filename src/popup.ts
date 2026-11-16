@@ -149,6 +149,10 @@ function updateStatus(): void {
   });
 }
 
+function updatePaused(): void {
+  document.body.classList.toggle('paused', !enabled.checked);
+}
+
 function updateTestRow(): void {
   const field = selectedField();
   const saved = hasSavedKey(field);
@@ -412,6 +416,7 @@ async function load(): Promise<void> {
   );
   updateKeyRows();
   enabled.checked = stored.enabled !== false;
+  updatePaused();
   classifyRead.checked =
     typeof stored.classifyRead === 'boolean' ? stored.classifyRead : DEFAULT_SETTINGS.classifyRead;
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
@@ -477,6 +482,7 @@ for (const field of [keyFields.gateway, keyFields.typesafe]) {
 
 enabled.addEventListener('change', () => {
   updateStatus();
+  updatePaused();
   void chrome.storage.local.set({ enabled: enabled.checked }).then(() => showSaved());
 });
 

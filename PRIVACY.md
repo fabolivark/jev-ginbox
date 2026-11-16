@@ -45,6 +45,7 @@ Everything the extension keeps lives in `chrome.storage.local`, inside your brow
 
 - settings: provider choice, your provider API keys, the last four characters of each key so the popup can show that a key is saved without reading it back, the enabled switch, the sensitivity threshold, the per-view toggles, the "Also classify read mail" toggle, and the first-run acknowledgement
 - your labels: name and description
+- `authFailed`: the name of the provider whose last call or connection test was rejected with 401 or 403, so the popup can say the key was rejected. It is removed when a call to that provider succeeds or its key is saved or removed, and it never reaches the content script.
 - the classification cache: one entry per classified row, keyed by thread id, last message id, provider, and a hash of your labels, with a timestamp. The service worker trims the cache to 4000 entries once it passes 5000, deleting the oldest first.
 
 The extension restricts this storage to its own trusted pages, the service worker and the popup, so the content script running on Gmail cannot read it. The content script asks the service worker for the named settings and the cache entries and never receives an API key. Only the service worker reads your API keys, and only to call the provider you selected.

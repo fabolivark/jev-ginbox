@@ -257,7 +257,8 @@ button.gc-badge,
 button.gc-chip,
 .gc-filter,
 .gc-clear,
-.gc-setup {
+.gc-setup,
+.gc-select-option {
   appearance: none;
   font: inherit;
   line-height: inherit;
@@ -297,7 +298,8 @@ button.gc-chip[aria-pressed='true'],
 }
 
 .gc-clear,
-.gc-setup {
+.gc-setup,
+.gc-select-option {
   background: transparent;
   color: var(--gc-text);
   border: 1px solid var(--gc-outline);
@@ -306,15 +308,29 @@ button.gc-chip[aria-pressed='true'],
 }
 
 .gc-clear:hover,
-.gc-setup:hover {
+.gc-setup:hover,
+.gc-select-option:hover {
   border-color: var(--gc-text);
+}
+
+/* The selection count and its Clear sit last on screen; the count is a live region
+   that stays in the DOM across bar rebuilds, so its DOM position is the bar's first. */
+.gc-selected {
+  order: 1;
+  color: var(--gc-text);
+  font-weight: 700;
+}
+
+.gc-unselect {
+  order: 2;
 }
 
 button.gc-badge:focus-visible,
 button.gc-chip:focus-visible,
 .gc-filter:focus-visible,
 .gc-clear:focus-visible,
-.gc-setup:focus-visible {
+.gc-setup:focus-visible,
+.gc-select-option:focus-visible {
   outline: 2px solid var(--gc-hue-fg, var(--gc-text));
   outline-offset: 1px;
 }

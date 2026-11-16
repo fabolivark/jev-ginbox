@@ -32,8 +32,16 @@ import {
   matchesFilter,
   parseFilterToken,
   shownLabels,
+  type FilterOption,
   type RowFilter,
 } from './filter';
+import {
+  rowsToSelect,
+  selectOptions,
+  selectTitle,
+  selectedText,
+  type SelectableRow,
+} from './selection';
 import { isAuthRejection, pendingRow, type PendingRow } from './status';
 import { parseColor, themeFromBackgrounds, type GmailTheme } from './theme';
 import { rowFailureText } from './errors';
@@ -56,6 +64,12 @@ type Visual = {
   transitionApplied: string;
 };
 
+type SelectionState = {
+  rows: SelectableRow[];
+  byKey: Map<string, HTMLTableRowElement>;
+  checked: number;
+};
+
 type Ranked = {
   row: HTMLTableRowElement;
   index: number;
@@ -72,7 +86,9 @@ const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
 const ANIMATION_TRANSITION = 'transform 180ms';
 const HIDDEN_ATTRIBUTE = 'data-gc-hidden';
-const CONTROL_SELECTOR = '[data-gc-filter], [data-gc-clear], [data-gc-setup]';
+const CONTROL_SELECTOR =
+  '[data-gc-filter], [data-gc-clear], [data-gc-setup], [data-gc-select], [data-gc-unselect]';
+const CHECKBOX_SELECTOR = '[role="checkbox"]';
 const SENDER_SELECTOR = 'span[email][name]';
 const ISOLATED_EVENTS = [
   'pointerdown',
@@ -724,18 +740,20 @@ function renderBar(): void {
       ? 0
       : rowClassifications.filter((row) => matchesFilter(filter, row, labels, threshold)).length;
   const optionSignature = options.map((option) => `${option.token}:${option.count}`).join(',');
-  const signature = `${total}|${classifiable}|${status}|${errorMessage ?? ''}|${halted}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}`;
+  const selection = selectionState();
+  const selectable = selectOptions(selection.rows, labels, threshold);
+  const selectSignature = selectable.map((option) => `${option.token}:${option.count}`).join(',');
+  const signature = `${total}|${classifiable}|${status}|${errorMessage ?? ''}|${halted}|${activeToken() ?? ''}|${loaded}|${shown}|${optionSignature}|${selection.checked}|${selectSignature}`;
   if (bar.dataset.gcSig === signature) return;
   bar.dataset.gcSig = signature;
   const focused = document.activeElement;
   const focusedControl =
-    focused instanceof HTMLElement && bar.contains(focused)
-      ? (focused.dataset.gcFilter ?? (focused.dataset.gcClear !== undefined ? '' : null))
-      : null;
+    focused instanceof HTMLElement && bar.contains(focused) ? controlSelector(focused) : null;
   const setupFocused =
     focused instanceof HTMLElement && bar.contains(focused) && focused.dataset.gcSetup !== undefined;
   const live = liveRegion(bar);
-  for (const child of [...bar.children]) if (child !== live) child.remove();
+  const selectedStatus = selectionStatus(bar);
+  for (const child of [...bar.children]) if (child !== live && child !== selectedStatus) child.remove();
   const statusText =
     status === 0
       ? null
@@ -793,11 +811,14 @@ function renderBar(): void {
     note.textContent = filterNote(filterName(filter, labels), shown, loaded);
     bar.appendChild(note);
   }
+  renderSelectControls(bar, selectable, selection.checked, selectedStatus);
   if (focusedControl !== null) {
-    const selector =
-      focusedControl === '' ? '[data-gc-clear]' : `[data-gc-filter="${CSS.escape(focusedControl)}"]`;
+    const selecting =
+      focusedControl.startsWith('[data-gc-select') || focusedControl === '[data-gc-unselect]';
     const target =
-      bar.querySelector<HTMLElement>(selector) ?? bar.querySelector<HTMLElement>('[data-gc-filter]');
+      bar.querySelector<HTMLElement>(focusedControl) ??
+      (selecting ? bar.querySelector<HTMLElement>('[data-gc-select]') : null) ??
+      bar.querySelector<HTMLElement>('[data-gc-filter]');
     target?.focus();
   }
   if (setupFocused) bar.querySelector<HTMLElement>('[data-gc-setup]')?.focus();
@@ -834,6 +855,141 @@ function renderLive(live: HTMLElement, count: string, status: string | null, err
     span.textContent = text;
     live.appendChild(span);
   }
+}
+
+function controlSelector(control: HTMLElement): string | null {
+  for (const attribute of ['data-gc-filter', 'data-gc-select']) {
+    const value = control.getAttribute(attribute);
+    if (value !== null) return `[${attribute}="${CSS.escape(value)}"]`;
+  }
+  for (const attribute of ['data-gc-clear', 'data-gc-unselect']) {
+    if (control.hasAttribute(attribute)) return `[${attribute}]`;
+  }
+  return null;
+}
+
+// The "N selected" line is a polite live region that outlives bar rebuilds, so a
+// screen reader hears the count change after a Select or Clear selection.
+function selectionStatus(root: HTMLElement): HTMLElement {
+  const existing = root.querySelector<HTMLElement>(':scope > .gc-selected');
+  if (existing !== null) return existing;
+  const status = document.createElement('span');
+  status.className = 'gc-selected';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  root.appendChild(status);
+  return status;
+}
+
+function renderSelectControls(
+  root: HTMLElement,
+  options: FilterOption[],
+  checked: number,
+  status: HTMLElement
+): void {
+  if (options.length > 0) {
+    const group = document.createElement('span');
+    group.className = 'gc-filters gc-select';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', "Select the loaded rows with a label in Gmail's list");
+    const caption = document.createElement('span');
+    caption.className = 'gc-filters-label';
+    caption.textContent = 'Select in Gmail:';
+    group.appendChild(caption);
+    for (const option of options) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gc-select-option';
+      button.dataset.gcSelect = option.token;
+      const title = selectTitle(option.name, option.count);
+      button.title = title;
+      button.setAttribute('aria-label', title);
+      button.textContent = option.name;
+      const count = document.createElement('span');
+      count.className = 'gc-filter-count';
+      count.textContent = String(option.count);
+      button.appendChild(count);
+      group.appendChild(button);
+    }
+    root.appendChild(group);
+  }
+  const text = checked > 0 ? selectedText(checked) : '';
+  if (status.textContent !== text) status.textContent = text;
+  if (checked > 0) {
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'gc-clear gc-unselect';
+    clear.dataset.gcUnselect = '';
+    clear.textContent = 'Clear selection';
+    clear.title = "Untick every selected row in Gmail's list";
+    root.appendChild(clear);
+  }
+}
+
+function rowCheckbox(row: HTMLTableRowElement): HTMLElement | null {
+  return row.querySelector<HTMLElement>(CHECKBOX_SELECTOR);
+}
+
+function isChecked(row: HTMLTableRowElement): boolean {
+  return rowCheckbox(row)?.getAttribute('aria-checked') === 'true';
+}
+
+function selectionState(): SelectionState {
+  const rows: SelectableRow[] = [];
+  const byKey = new Map<string, HTMLTableRowElement>();
+  let checked = 0;
+  const filter = activeFilter;
+  for (const row of currentList?.querySelectorAll<HTMLTableRowElement>('tr.zA') ?? []) {
+    const ticked = isChecked(row);
+    if (ticked) checked += 1;
+    const key = classifiableKey(row);
+    if (key === null || rowCheckbox(row) === null) continue;
+    byKey.set(key, row);
+    rows.push({
+      key,
+      classification: classifications.get(key),
+      checked: ticked,
+      hidden: filter !== null && !rowMatches(row, filter),
+    });
+  }
+  return { rows, byKey, checked };
+}
+
+// Gmail's checkbox may act on mouseup after a mousedown or on click, so send the
+// press first and the click only when the press did not flip it: one toggle either way.
+function setChecked(row: HTMLTableRowElement, value: boolean): void {
+  const box = rowCheckbox(row);
+  if (box === null || isChecked(row) === value) return;
+  const rect = box.getBoundingClientRect();
+  const init: MouseEventInit = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    button: 0,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+  };
+  box.dispatchEvent(new MouseEvent('mousedown', { ...init, buttons: 1 }));
+  box.dispatchEvent(new MouseEvent('mouseup', init));
+  if (isChecked(row) !== value) box.dispatchEvent(new MouseEvent('click', init));
+}
+
+function selectRows(token: string | undefined): void {
+  const target = parseFilterToken(token, labels);
+  if (target === null) return;
+  const selection = selectionState();
+  for (const key of rowsToSelect(selection.rows, target, labels, threshold)) {
+    const row = selection.byKey.get(key);
+    if (row !== undefined) setChecked(row, true);
+  }
+  render();
+}
+
+function clearSelection(): void {
+  for (const row of currentList?.querySelectorAll<HTMLTableRowElement>('tr.zA') ?? []) {
+    setChecked(row, false);
+  }
+  render();
 }
 
 function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
@@ -954,6 +1110,14 @@ function setFilter(next: RowFilter | null): void {
 function onControl(control: HTMLElement): void {
   if (control.dataset.gcSetup !== undefined) {
     chrome.runtime.sendMessage({ type: 'openSetup' }).catch(() => {});
+    return;
+  }
+  if (control.dataset.gcSelect !== undefined) {
+    selectRows(control.dataset.gcSelect);
+    return;
+  }
+  if (control.dataset.gcUnselect !== undefined) {
+    clearSelection();
     return;
   }
   if (control.dataset.gcClear !== undefined) {

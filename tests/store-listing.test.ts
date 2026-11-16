@@ -51,3 +51,16 @@ test('the repository links point to the fork, and only the README credits upstre
   assert.match(readme, /iamomiid\/jev-inbox/, 'README credits the upstream project');
   assert.match(read('PRIVACY.md'), new RegExp(REPO));
 });
+
+test('the listing, privacy policy and first-run notice say the sender, subject and date are kept in the browser', () => {
+  const listing = read('docs/store-listing.md');
+  assert.match(field(listing, '`storage`'), /sender, subject and date of each classified thread/);
+  assert.match(field(listing, 'Storage and deletion'), /sender, subject and date of each classified thread/);
+  assert.match(field(listing, 'Storage and deletion'), /never sent anywhere/);
+  const privacy = read('PRIVACY.md');
+  assert.match(privacy, /sender name, sender address, subject and date of the thread/);
+  assert.match(privacy, /never sent anywhere/);
+  assert.match(privacy, /never deletes, archives or moves mail/);
+  const notice = read('src/popup.html').match(/<div id="privacyNotice"[\s\S]*?<\/p>/)?.[0] ?? '';
+  assert.match(notice.replace(/\s+/g, ' '), /sender, subject and date of classified emails are kept in this browser/);
+});

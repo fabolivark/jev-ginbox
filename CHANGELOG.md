@@ -10,6 +10,7 @@ Every version of Jev Inbox for Gmail, newest first. The version in `package.json
 - Each complete label saves on its own; an incomplete one stays in the editor, marked invalid with an inline message.
 - The armed Clear cache button reads "Confirm clear".
 - "Sensitivity" is now "Strictness": higher shows only the emails and chips Jev is most sure about. The stored value is unchanged.
+- The cache keeps the sender, subject and date of each classified thread, locally only. "Manage" in the popup opens a page that groups the classified threads by label and sender, with filters, and opens a Gmail search for the picked senders, split into numbered searches when long, to delete or archive a whole group in Gmail.
 - `npm run package` builds a clean `dist/` and writes `release/jev-inbox-<version>.zip`, and fails when `package.json` and `manifest.json` carry different versions. CI builds the zip on every push and pull request.
 - `dist/` holds only the extension. The demo and the store stub build to `dev-dist/` and read their version from `manifest.json`.
 

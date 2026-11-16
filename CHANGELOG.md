@@ -4,6 +4,8 @@ Every version of Jev Inbox for Gmail, newest first. The version in `package.json
 
 ## Unreleased
 
+- A fresh install opens the setup tab. The toolbar badge shows `!` until the notice is accepted and the selected provider has a key, and while its key is rejected (401 or 403). The Gmail bar offers Finish setup when classification halts for setup.
+- The first-run notice is three short bullets with the same disclosures, and the popup dims its settings while the extension is paused.
 - Provider failures show as plain text in the popup's Test result and the Gmail bar (rejected key, rate limited, unavailable, unreachable, refused with its status), never the provider's own message.
 - Each complete label saves on its own; an incomplete one stays in the editor, marked invalid with an inline message.
 - The armed Clear cache button reads "Confirm clear".

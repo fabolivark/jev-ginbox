@@ -67,7 +67,8 @@ Gmail shows at most 100 conversations per page, and Jev Inbox classifies only th
 - A long pick is split into numbered searches ("Search 1 of 3") of at most 1500 characters each. Google documents no limit for a Gmail search; 1500 is the known limit of a Gmail filter's criteria and has not been measured against the search box, so it is a conservative guess (`GMAIL_QUERY_MAX` in `src/triage.ts`).
 - The page offers the `mail/u/N` accounts of the Gmail tabs you have open, or `mail/u/0` when none is open. The cache does not record which account a thread came from, so with several accounts the list mixes them.
 - Addresses with characters a Gmail search cannot take as a bare word (spaces, quotes, parentheses, braces, or a leading minus) are listed but cannot be picked.
-- Threads classified before the cache kept the sender are counted and left out; "Clear cache" classifies them again with it.
+- Threads classified before the cache kept the sender are counted and left out, so a cache from an earlier version lists nothing at first. Threads classified from then on show up; "Clear cache" lists the loaded rows sooner by classifying them again, which sends them to the provider again.
+- A conversation counts once, with its newest classification, even after a new message gave it a second cache entry.
 - The page reads the cache when it opens; reload it to see threads classified since.
 
 ## Privacy

@@ -14,7 +14,7 @@
         --accent-soft: #eef2ff;
         --accent-contrast: #ffffff;
         --ok: #1a7f37;
-        --danger: #d5453b;
+        --danger: #c0392b;
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
@@ -456,11 +456,13 @@
         background: var(--bg);
         color: var(--danger);
       }
-      .label-error {
-        display: block;
-        min-height: 14px;
+      .label-issue {
+        margin: 0;
         font-size: 11px;
         color: var(--danger);
+      }
+      .label-card [aria-invalid="true"] {
+        border-color: var(--danger);
       }
       .footer {
         display: flex;
@@ -713,7 +715,6 @@
       </p>
       <div id="labels"></div>
       <button id="addLabel" type="button">Add label</button>
-      <span id="labelError" class="label-error"></span>
     </section>
 
     <section class="section">
@@ -784,7 +785,7 @@
 
     <section class="section">
       <div class="section-head">
-        <h2>Sensitivity</h2>
+        <h2>Strictness</h2>
         <span id="thresholdValue" class="count"></span>
       </div>
       <input
@@ -794,10 +795,10 @@
         min="0.5"
         max="0.95"
         step="0.05"
-        aria-label="Sensitivity"
+        aria-label="Strictness"
       />
       <p class="hint">
-        Lower sensitivity shows more critical emails and chips. Higher shows only confident ones.
+        Higher shows only the emails and chips Jev is most sure about. Lower shows more.
       </p>
     </section>
 

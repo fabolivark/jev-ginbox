@@ -4,6 +4,10 @@ Every version of Jev Inbox for Gmail, newest first. The version in `package.json
 
 ## Unreleased
 
+- Provider failures show as plain text in the popup's Test result and the Gmail bar (rejected key, rate limited, unavailable, unreachable, refused with its status), never the provider's own message.
+- Each complete label saves on its own; an incomplete one stays in the editor, marked invalid with an inline message.
+- The armed Clear cache button reads "Confirm clear".
+- "Sensitivity" is now "Strictness": higher shows only the emails and chips Jev is most sure about. The stored value is unchanged.
 - `npm run package` builds a clean `dist/` and writes `release/jev-inbox-<version>.zip`, and fails when `package.json` and `manifest.json` carry different versions. CI builds the zip on every push and pull request.
 - `dist/` holds only the extension. The demo and the store stub build to `dev-dist/` and read their version from `manifest.json`.
 

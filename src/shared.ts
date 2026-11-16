@@ -127,7 +127,8 @@ export type ChangedMessage = {
 
 export type TestResult =
   | { ok: true }
-  | { ok: false; message: string; error?: 'needs_ack' };
+  | { ok: false; error: 'needs_ack' | 'missing_key' | 'failed' }
+  | { ok: false; error: 'provider'; status?: number };
 
 export function labelsHash(labels: LabelConfig[]): string {
   let h = 5381;
@@ -169,6 +170,35 @@ export function isLabelConfig(value: unknown): value is LabelConfig {
     typeof v.name === 'string' &&
     typeof v.description === 'string'
   );
+}
+
+export type LabelIssue = { name: boolean; description: boolean };
+
+export function labelIssue(label: LabelConfig): LabelIssue | undefined {
+  const name = label.name.trim().length === 0;
+  const description = label.description.trim().length === 0;
+  return name || description ? { name, description } : undefined;
+}
+
+export function labelIssueText(issue: LabelIssue): string {
+  const missing =
+    issue.name && issue.description ? 'a name and a description' : issue.name ? 'a name' : 'a description';
+  return `Add ${missing} to save this label.`;
+}
+
+// Each complete label saves on its own. An incomplete edit of a saved label keeps its saved
+// version until it is fixed; a new incomplete label is not saved yet. Ids never change.
+export function labelsToSave(draft: LabelConfig[], saved: LabelConfig[]): LabelConfig[] {
+  const next: LabelConfig[] = [];
+  for (const label of draft) {
+    if (labelIssue(label) === undefined) {
+      next.push({ id: label.id, name: label.name.trim(), description: label.description.trim() });
+      continue;
+    }
+    const previous = saved.find((item) => item.id === label.id);
+    if (previous !== undefined) next.push(previous);
+  }
+  return next.slice(0, MAX_LABELS);
 }
 
 export function isClassification(value: unknown): value is Classification {

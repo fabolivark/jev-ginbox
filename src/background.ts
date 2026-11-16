@@ -82,27 +82,21 @@ async function handle(
   const provider = isProvider(storedProvider) ? storedProvider : 'gateway';
   const key = provider === 'typesafe' ? typesafeApiKey : apiKey;
   if (test) {
-    if (privacyAck !== true) {
-      return {
-        ok: false,
-        message: 'Accept the first-run notice in the popup before testing.',
-        error: 'needs_ack',
-      } satisfies TestResult;
-    }
+    if (privacyAck !== true) return { ok: false, error: 'needs_ack' } satisfies TestResult;
     if (typeof key !== 'string' || key.length === 0) {
-      return { ok: false, message: 'No API key saved.' } satisfies TestResult;
+      return { ok: false, error: 'missing_key' } satisfies TestResult;
     }
     try {
       await testConnection(key, provider);
       await recordAuth(authFailed, provider, 'accepted');
       return { ok: true } satisfies TestResult;
     } catch (error) {
-      const failure = toClassifyError(error);
-      await recordAuth(authFailed, provider, isAuthRejection(failure.status) ? 'rejected' : 'other');
+      const { status } = toClassifyError(error);
+      await recordAuth(authFailed, provider, isAuthRejection(status) ? 'rejected' : 'other');
       return {
         ok: false,
-        message:
-          failure.status === undefined ? failure.message : `${failure.status}: ${failure.message}`,
+        error: 'provider',
+        ...(status === undefined ? {} : { status }),
       } satisfies TestResult;
     }
   }

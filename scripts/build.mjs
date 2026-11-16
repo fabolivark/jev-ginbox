@@ -22,6 +22,7 @@ const runs = [
   entry(['src/content.ts'], 'iife', 'dist'),
   entry(['src/background.ts'], 'esm', 'dist'),
   entry(['src/popup.ts'], 'iife', 'dist'),
+  entry(['src/manage.ts'], 'iife', 'dist'),
   entry(['dev/demo.ts'], 'iife', 'dev-dist'),
   entry(['dev/store/stub.ts'], 'iife', 'dev-dist'),
 ];
@@ -38,5 +39,6 @@ if (watch) {
 
 cpSync('manifest.json', 'dist/manifest.json');
 cpSync('src/popup.html', 'dist/popup.html');
+cpSync('src/manage.html', 'dist/manage.html');
 cpSync('src/section.css', 'dist/section.css');
 cpSync('assets', 'dist/assets', { recursive: true, filter: (src) => !src.endsWith('.svg') });

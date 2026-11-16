@@ -46,15 +46,19 @@ Everything the extension keeps lives in `chrome.storage.local`, inside your brow
 - settings: provider choice, your provider API keys, the last four characters of each key so the popup can show that a key is saved without reading it back, the enabled switch, the Strictness threshold, the per-view toggles, the "Also classify read mail" toggle, and the first-run acknowledgement
 - your labels: name and description
 - `authFailed`: the name of the provider whose last call or connection test was rejected with 401 or 403, so the popup and the toolbar badge can say the key was rejected. It is removed when a call to that provider succeeds or its key is saved or removed, and it never reaches the content script.
-- the classification cache: one entry per classified row, keyed by thread id, last message id, provider, and a hash of your labels, with a timestamp. The service worker trims the cache to 4000 entries once it passes 5000, deleting the oldest first.
+- the classification cache: one entry per classified row, keyed by thread id, last message id, provider, and a hash of your labels, with a timestamp, the scores Jev returned, and the sender name, sender address, subject and date of the thread as Gmail showed them (never the snippet). The sender, subject and date are kept only for the Manage page and are never sent anywhere: not to the provider again, not to the content script, not to any server. The service worker trims the cache to 4000 entries once it passes 5000, deleting the oldest first.
 
 The extension restricts this storage to its own trusted pages, the service worker and the popup, so the content script running on Gmail cannot read it. The content script asks the service worker for the named settings and the cache entries and never receives an API key. Only the service worker reads your API keys, and only to call the provider you selected.
+
+## The Manage page
+
+"Manage" in the popup opens an extension page that reads the classification cache and lists the classified threads grouped by label and by sender, with filters. It makes no network request. When you pick senders and press "Open in Gmail", it opens a Gmail search such as `in:inbox from:(a@example.com OR b@example.com)` in a new tab, in the Gmail account you choose; the addresses travel to Gmail only in that tab's address, the way any Gmail search does. Gmail then runs the search, and you decide in Gmail whether to delete or archive what it finds. Jev Inbox never deletes, archives or moves mail itself.
 
 Rows classify again when the cache entry they would use is gone: "Clear cache" removes every entry, editing a label changes the labels hash, and switching providers changes the key.
 
 ## How to delete everything
 
-- "Clear cache" in the popup removes every cached classification. Your settings and labels stay, and the unread rows of the list you are looking at classify again, with its read rows when "Also classify read mail" is on.
+- "Clear cache" in the popup removes every cached classification, with the senders, subjects and dates stored next to them. Your settings and labels stay, and the unread rows of the list you are looking at classify again, with its read rows when "Also classify read mail" is on.
 - Removing the extension from `chrome://extensions` deletes its storage, including your keys, labels, and the cache.
 
 ## Changes

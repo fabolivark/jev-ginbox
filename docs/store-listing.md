@@ -26,7 +26,7 @@ Jev Inbox reorders the message list Gmail already shows. Unread mail moves above
 - Your strictness: choose how confident a classification has to be before a row counts as critical. Higher is stricter.
 - Your provider: Vercel AI Gateway or TypeSafe, with your own key.
 
-Only the unread rows in the Gmail list currently loaded are classified, plus its read rows if you turn on "Also classify read mail", only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. The snippet is the first part of the email body; the rest of the body and attachments are never read or sent. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev. The Critical badge is a model guess from text the sender wrote and can be gamed by a phishing email, so treat it as a sorting hint, not a safety signal. Results are cached in your browser. There is no account, no analytics, and no server of ours.
+Only the unread rows in the Gmail list currently loaded are classified, plus its read rows if you turn on "Also classify read mail", only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. The snippet is the first part of the email body; the rest of the body and attachments are never read or sent. On Vercel AI Gateway, Vercel forwards each request to TypeSafe, which runs Jev. The Critical badge is a model guess from text the sender wrote and can be gamed by a phishing email, so treat it as a sorting hint, not a safety signal. Results are cached in your browser, with the sender, subject and date of each classified email, so the Manage page can group them by label and sender and open a Gmail search for a whole group; Jev Inbox never deletes or moves mail itself. There is no account, no analytics, and no server of ours.
 
 ## Single purpose statement
 
@@ -34,7 +34,7 @@ Jev Inbox sorts and labels the unread messages Gmail already shows in the list c
 
 ## Permission justifications
 
-- `storage`: saves your settings (provider, API keys, enabled switch, strictness, view toggles, first-run acknowledgement), your labels, and the classification cache, all in `chrome.storage.local` in your own browser profile.
+- `storage`: saves your settings (provider, API keys, enabled switch, strictness, view toggles, first-run acknowledgement), your labels, and the classification cache with the sender, subject and date of each classified thread for the Manage page, all in `chrome.storage.local` in your own browser profile.
 - `https://mail.google.com/*`: reads the rendered message list to identify unread rows, and read rows when "Also classify read mail" is on, and their sender, subject, snippet and date, reorders those rows, and injects the status bar and label chips.
 - `https://ai-gateway.vercel.sh/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when Vercel AI Gateway is the selected provider, using the user's own key.
 - `https://api.typesafe.ai/*`: sends the sender, subject, snippet (the first part of the body) and date of unread rows, and of read rows when "Also classify read mail" is on, with the user's label names and descriptions, for classification when TypeSafe is the selected provider, using the user's own key.
@@ -51,7 +51,7 @@ No other hosts are requested. The extension makes no request to any server of it
 - Transfer to third parties: only to the AI provider the user selected (Vercel AI Gateway or TypeSafe), under the user's own key and account, and only for classification.
 - Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header. The popup keeps only the last four characters of each key so it can show that a key is saved without reading it back.
 - Personal communications: the sender, subject, snippet and date of unread rows, and of read rows when the user turns that on, are sent to the selected provider for classification, together with the user's label names and descriptions as criteria. The snippet is the first part of the email body, so it can carry body text such as a verification code; the rest of the body and attachments are not read or sent.
-- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, with its read rows when "Also classify read mail" is on, and removing the extension deletes all of it.
+- Storage and deletion: settings, keys, labels and the classification cache, which keeps the sender, subject and date of each classified thread for the Manage page, stay in the browser and that stored copy is never sent anywhere. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, with its read rows when "Also classify read mail" is on, and removing the extension deletes all of it.
 
 ## Images
 

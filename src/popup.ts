@@ -88,6 +88,7 @@ const gotIt = document.getElementById('gotIt') as HTMLButtonElement;
 const threshold = document.getElementById('threshold') as HTMLInputElement;
 const thresholdValue = document.getElementById('thresholdValue') as HTMLSpanElement;
 const clear = document.getElementById('clear') as HTMLButtonElement;
+const manage = document.getElementById('manage') as HTMLButtonElement;
 const version = document.getElementById('version') as HTMLSpanElement;
 const labelsEl = document.getElementById('labels') as HTMLDivElement;
 const labelsEmpty = document.getElementById('labelsEmpty') as HTMLParagraphElement;
@@ -548,6 +549,10 @@ gotIt.addEventListener('click', () => {
 });
 
 armConfirm(clear, clearCache, 'Confirm clear cache', 'Confirm clear');
+
+manage.addEventListener('click', () => {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('manage.html') });
+});
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local' || !('authFailed' in changes)) return;

@@ -138,3 +138,17 @@ test('isContentState accepts a state reply and rejects a failure', () => {
   assert.equal(isContentState({ ok: false, error: 'failed' }), false);
   assert.equal(isContentState(undefined), false);
 });
+
+const meta = { fromName: 'Ana', fromEmail: 'ana@bank.example', subject: 'Invoice 42', date: 'Nov 3' };
+
+test('contentState hands the content script scores only, never the stored sender or subject', () => {
+  const state = contentState({ ...stored, [`crit:t4|m4|${version}`]: { ...hit, ts: 2, thread: meta } });
+  assert.deepEqual(state.cache[`t4|m4|${version}`], hit);
+  assert.deepEqual(state.cache[`t1|m1|${version}`], hit);
+  assert.equal(JSON.stringify(state).includes('ana@bank.example'), false);
+});
+
+test('contentChanges strips the stored sender and subject from a cache change', () => {
+  const message = contentChanges({ [`crit:t4|m4|${version}`]: { newValue: { ...hit, ts: 2, thread: meta } } });
+  assert.deepEqual(message?.changes, { [`crit:t4|m4|${version}`]: { newValue: hit } });
+});

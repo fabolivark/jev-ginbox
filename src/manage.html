@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage classified mail - Jev Inbox</title>
+    <link rel="icon" href="assets/icon-32.png" />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f4f4f6;
+        --text: #1f2328;
+        --muted: #57606a;
+        --border: #d8d8dd;
+        --accent: #4f46e5;
+        --accent-soft: #eef2ff;
+        --accent-contrast: #ffffff;
+        --warn: #7d5300;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16181d;
+          --surface: #1f232b;
+          --text: #e6e8ec;
+          --muted: #9aa3af;
+          --border: #333842;
+          --accent: #818cf8;
+          --accent-soft: #272b46;
+          --accent-contrast: #16181d;
+          --warn: #d29922;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      h2 {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      a {
+        color: var(--accent);
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border);
+      }
+      .top-text {
+        min-width: 0;
+      }
+      .summary {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-areas:
+          "filters filters"
+          "groups picks";
+        gap: 16px 24px;
+        align-items: start;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px 24px 32px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 12px 16px;
+      }
+      .filters {
+        grid-area: filters;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 12px 16px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .field.grow {
+        flex: 1 1 220px;
+      }
+      select,
+      input[type="search"] {
+        min-height: 34px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        font-size: 14px;
+        max-width: 100%;
+      }
+      .groups {
+        grid-area: groups;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #groups {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 16px;
+        height: 16px;
+      }
+      .group {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .group-head label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .count {
+        flex: none;
+        min-width: 24px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .senders {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .sender + .sender {
+        border-top: 1px solid var(--border);
+      }
+      .sender label {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 2px 10px;
+        align-items: start;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      .sender input {
+        margin-top: 3px;
+      }
+      .sender-main {
+        min-width: 0;
+      }
+      .sender-name {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .sender-email {
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      .sender-latest {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sender-note {
+        color: var(--warn);
+        font-size: 12px;
+      }
+      .picks {
+        grid-area: picks;
+        position: sticky;
+        top: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .picks p {
+        margin: 0;
+      }
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      .searches {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .open {
+        display: block;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        font-weight: 600;
+        text-align: center;
+        text-decoration: none;
+      }
+      .open:hover {
+        filter: brightness(1.08);
+      }
+      button {
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .hint ol {
+        margin: 4px 0 0;
+        padding-left: 20px;
+      }
+      .notice {
+        margin: 0;
+        color: var(--muted);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-areas:
+            "filters"
+            "picks"
+            "groups";
+          padding: 16px;
+        }
+        .picks {
+          position: static;
+        }
+        .top {
+          padding: 16px;
+        }
+      }
+      @media (max-width: 420px) {
+        .filters .field:not(.grow) {
+          flex: 1 1 120px;
+        }
+        .group-head,
+        .sender label {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <img src="assets/icon-48.png" width="32" height="32" alt="" />
+      <div class="top-text">
+        <h1>Manage classified mail</h1>
+        <p id="summary" class="summary">Loading...</p>
+      </div>
+    </header>
+    <main class="layout">
+      <section class="card filters" aria-label="Filters">
+        <label class="field">
+          Label
+          <select id="labelFilter"></select>
+        </label>
+        <label class="field">
+          Urgency from
+          <select id="minUrgency"></select>
+        </label>
+        <label class="field">
+          to
+          <select id="maxUrgency"></select>
+        </label>
+        <label class="field grow">
+          Sender or subject
+          <input id="textFilter" type="search" placeholder="Filter by sender or subject" />
+        </label>
+      </section>
+
+      <div class="groups">
+        <div id="groups"></div>
+        <p id="empty" class="notice" hidden></p>
+        <p id="missing" class="notice" hidden></p>
+      </div>
+
+      <aside class="card picks" aria-label="Open in Gmail">
+        <h2>Open in Gmail</h2>
+        <p id="pickCount" aria-live="polite">Pick senders to build a Gmail search.</p>
+        <label class="check"><input id="inboxOnly" type="checkbox" checked /> Only mail in the Inbox</label>
+        <label class="field">
+          Gmail account
+          <select id="account"></select>
+        </label>
+        <div id="searches" class="searches"></div>
+        <p id="skipped" class="warn" hidden></p>
+        <button id="clearPicks" type="button" disabled>Clear picks</button>
+        <div class="hint">
+          The search finds every email from these senders in Gmail, not only the ones listed here. In
+          Gmail:
+          <ol>
+            <li>Tick the select-all box above the list.</li>
+            <li>Click "Select all conversations that match this search".</li>
+            <li>Delete or Archive.</li>
+          </ol>
+          Jev Inbox never deletes, archives or moves mail itself.
+        </div>
+      </aside>
+    </main>
+    <script src="manage.js"></script>
+  </body>
+</html>

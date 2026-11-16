@@ -211,6 +211,58 @@ export function isClassification(value: unknown): value is Classification {
   return Object.values(labels).every((probability) => typeof probability === 'number');
 }
 
+// What the manage page shows for a cached thread. Stored locally only, never sent anywhere.
+export type ThreadMeta = { fromName: string; fromEmail: string; subject: string; date: string };
+
+export type CacheEntry = Classification & { ts: number; thread: ThreadMeta };
+
+const META_LIMITS: Record<keyof ThreadMeta, number> = {
+  fromName: 100,
+  fromEmail: 254,
+  subject: 200,
+  date: 60,
+};
+
+export function cacheEntry(classification: Classification, email: EmailState, ts: number): CacheEntry {
+  return {
+    criticalProbability: classification.criticalProbability,
+    urgencyScore: classification.urgencyScore,
+    labels: classification.labels,
+    ts,
+    thread: {
+      fromName: email.fromName.slice(0, META_LIMITS.fromName),
+      fromEmail: email.fromEmail.slice(0, META_LIMITS.fromEmail),
+      subject: email.subject.slice(0, META_LIMITS.subject),
+      date: email.date.slice(0, META_LIMITS.date),
+    },
+  };
+}
+
+export function classificationOf(value: unknown): Classification | undefined {
+  if (!isClassification(value)) return undefined;
+  return {
+    criticalProbability: value.criticalProbability,
+    urgencyScore: value.urgencyScore,
+    labels: value.labels,
+  };
+}
+
+export function threadMetaOf(value: unknown): ThreadMeta | undefined {
+  if (typeof value !== 'object' || value === null || !('thread' in value)) return undefined;
+  const thread: unknown = value.thread;
+  if (typeof thread !== 'object' || thread === null) return undefined;
+  const t = thread as Record<string, unknown>;
+  if (
+    typeof t.fromName !== 'string' ||
+    typeof t.fromEmail !== 'string' ||
+    typeof t.subject !== 'string' ||
+    typeof t.date !== 'string'
+  ) {
+    return undefined;
+  }
+  return { fromName: t.fromName, fromEmail: t.fromEmail, subject: t.subject, date: t.date };
+}
+
 function isContentSettingKey(key: string): key is ContentSettingKey {
   return (CONTENT_SETTING_KEYS as readonly string[]).includes(key);
 }
@@ -228,7 +280,8 @@ export function contentState(stored: Record<string, unknown>): ContentState {
     if (!storageKey.startsWith(CACHE_PREFIX)) continue;
     const cacheKey = storageKey.slice(CACHE_PREFIX.length);
     if (!cacheKey.endsWith(`|${version}`)) continue;
-    if (isClassification(value)) cache[cacheKey] = value;
+    const classification = classificationOf(value);
+    if (classification !== undefined) cache[cacheKey] = classification;
   }
   return { settings, cache };
 }
@@ -244,7 +297,15 @@ export function contentChanges(
       continue;
     }
     if (!isContentSettingKey(key) && !key.startsWith(CACHE_PREFIX)) continue;
-    forwarded[key] = 'newValue' in change ? { newValue: change.newValue } : {};
+    if (!('newValue' in change)) {
+      forwarded[key] = {};
+      continue;
+    }
+    // A cache entry also holds the thread's sender and subject; the content script needs only the scores.
+    const newValue = key.startsWith(CACHE_PREFIX)
+      ? (classificationOf(change.newValue) ?? change.newValue)
+      : change.newValue;
+    forwarded[key] = { newValue };
   }
   if (!keysChanged && Object.keys(forwarded).length === 0) return undefined;
   return { type: 'changed', keysChanged, changes: forwarded };

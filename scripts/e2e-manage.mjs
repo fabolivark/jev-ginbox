@@ -60,9 +60,37 @@ async function searchLinks(page) {
   return page.locator('#searches a').evaluateAll((links) => links.map((a) => ({ text: a.textContent, href: a.href })));
 }
 
+// A cache written before entries kept a sender: nothing is listed and the page says why.
+async function checkUpgradeState({ context, worker, extensionId, outDir, version, widths, themes }) {
+  const old = { labels: MANAGE_LABELS, provider: 'gateway', threshold: 0.7 };
+  for (let i = 0; i < 3; i++) {
+    old[`crit:old${i}|m|${version}`] = { criticalProbability: 0.1, urgencyScore: 0, labels: { visa: 0.9 }, ts: i };
+  }
+  await worker.evaluate((items) => chrome.storage.local.set(items), old);
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/manage.html`);
+  await page.waitForFunction(() => document.getElementById('summary')?.textContent !== 'Loading...');
+  assert.equal(await page.locator('.group').count(), 0, 'no groups from entries without a sender');
+  assert.equal(await page.locator('#summary').innerText(), 'No classified thread has its sender saved yet.');
+  assert.match(await page.locator('#empty').innerText(), /^3 threads were classified before Jev Inbox kept the sender/);
+  assert.equal(await page.locator('#missing').isVisible(), false, 'the empty note alone explains the missing senders');
+  for (const theme of themes) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(100);
+      await page.screenshot({ path: join(outDir, `manage-upgrade-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  await page.close();
+  await worker.evaluate((keys) => chrome.storage.local.remove(keys), Object.keys(old).filter((key) => key.startsWith('crit:')));
+  return true;
+}
+
 export async function checkManage({ context, worker, popup, extensionId, outDir, cacheVersion, widths, themes, gmailMax }) {
   const version = cacheVersion(MANAGE_LABELS, 'gateway');
   await worker.evaluate(async (keys) => chrome.storage.local.remove(keys), await cacheKeys(worker));
+  const upgrade = await checkUpgradeState({ context, worker, extensionId, outDir, version, widths, themes });
   const seed = { labels: MANAGE_LABELS, provider: 'gateway', threshold: 0.7 };
   THREADS.forEach(([labelId, name, email, subject, urgency], index) => {
     seed[`crit:t${index}|m${index}|${version}`] = entry(labelId, name, email, subject, urgency, 1000 + index);
@@ -194,5 +222,5 @@ export async function checkManage({ context, worker, popup, extensionId, outDir,
 
   await page.close();
   await gmailU1.close();
-  return { groups: 4, splitSearches: links.length };
+  return { groups: 4, splitSearches: links.length, upgrade };
 }

@@ -521,7 +521,7 @@ gotIt.addEventListener('click', () => {
   void chrome.storage.local.set({ privacyAck: true }).then(() => showSaved());
 });
 
-armConfirm(clear, clearCache, 'Confirm clear cache');
+armConfirm(clear, clearCache, 'Confirm clear cache', 'Confirm clear');
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local' || !('authFailed' in changes)) return;
